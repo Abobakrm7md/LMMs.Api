@@ -1,3 +1,5 @@
+using LMMs.Api.Interfaces;
+using LMMs.Api.Services;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,8 +23,12 @@ builder.Services.AddCors(options =>
     });
 });
 builder.Services.AddChatClient(new OllamaChatClient(
-    new Uri("http://localhost:11434"), "llama3"));
-
+    new Uri("http://localhost:11434"), "llama3.1")).UseFunctionInvocation();
+builder.Services.AddScoped<ILLMSDecision, LLMSDecision>();
+builder.Services.AddScoped<IAgentAnswer, AgentAnswer>();
+builder.Services.AddSingleton<IAgentTool, CalculatorTool>();
+builder.Services.AddSingleton<IAgentTool, GetTimeTool>();
+builder.Services.AddSingleton<IAgentTool, GetDateTool>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
