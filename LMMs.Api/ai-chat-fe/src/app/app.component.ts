@@ -15,23 +15,48 @@ export class AppComponent {
   chatHistory: { role: 'user' | 'assistant'; text: string }[] = [];
   isStreaming = false;
   abortController: AbortController | null = null;
-  test:string[]=[];
+
+  // ✅ الجديد
+  selectedFile: File | null = null;
+
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files?.length) {
+      this.selectedFile = input.files[0];
+    }
+  }
+
+  removeFile() {
+    this.selectedFile = null;
+  }
+
   async sendPrompt() {
-    debugger;
-    if (!this.prompt.trim()) return;
+    if (!this.prompt.trim() && !this.selectedFile) return;
 
     this.chatHistory.push({ role: 'user', text: this.prompt });
-
     let currentResponse = { role: 'assistant' as const, text: '' };
     this.chatHistory.push(currentResponse);
 
     this.isStreaming = true;
     this.abortController = new AbortController();
 
+    // ✅ لو في ملف استخدم FormData، لو مفيش استخدم JSON عادي
+    let body: FormData | string;
+    let headers: Record<string, string> = {};
+    
+      const formData = new FormData();
+      formData.append('prompt', this.prompt);
+    if (this.selectedFile) {
+
+      formData.append('file', this.selectedFile);
+      // ❌ متحطش Content-Type مع FormData — المتصفح بيحطه تلقائياً مع الـ boundary
+    } 
+      body = formData;
+
     const response = await fetch('https://localhost:7098/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: this.prompt }),
+      headers,
+      body: formData,
       signal: this.abortController.signal
     });
 
@@ -43,30 +68,17 @@ export class AppComponent {
       if (done) break;
 
       const chunk = decoder.decode(value, { stream: true });
-      for (const line of chunk.split("\n")) {
+      for (const line of chunk.split('\n')) {
         if (!line.trim()) continue;
-
-        try {
-          //const obj = JSON.parse(line);
-
-          // Reassign object to trigger Angular update
-          currentResponse = {
-            ...currentResponse,
-            text: currentResponse.text + line
-          };
-          console.log(currentResponse.text+line);
-          this.chatHistory[this.chatHistory.length - 1] = currentResponse;
-
-        } catch {
-          console.error("Invalid JSON chunk", line);
-        }
+        currentResponse = { ...currentResponse, text: currentResponse.text + line };
+        this.chatHistory[this.chatHistory.length - 1] = currentResponse;
       }
     }
 
     this.isStreaming = false;
     this.prompt = '';
+    this.selectedFile = null; // ✅ امسح الملف بعد الإرسال
   }
-
   stopResponse() {
     this.isStreaming = false;
     this.abortController?.abort();

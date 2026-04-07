@@ -23,5 +23,6 @@ namespace LMMs.Api.Services
                 return "Invalid calculation";
             }
         }
+
     }
 }

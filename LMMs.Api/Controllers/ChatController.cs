@@ -1,4 +1,5 @@
 ﻿using LMMs.Api.Interfaces;
+using LMMs.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
 using System.Data;
@@ -12,7 +13,6 @@ namespace YourNamespace.Controllers
     {
         private readonly IChatClient _chatClient;
         private readonly IAgentAnswer _agentAnswer;
-
         // Store chat messages for the entire session (simple demo)
         private static readonly List<ChatMessage> _chatMessages = new();
 
@@ -23,12 +23,12 @@ namespace YourNamespace.Controllers
         }
 
         [HttpPost("/api/chat")]
-        public async Task Stream([FromBody] ChatRequest request)
+        public async Task Stream([FromForm] ChatRequest request)
         {
             Response.ContentType = "text/event-stream";
             var cancellationToken = HttpContext.RequestAborted;
 
-            await foreach (var piece in _agentAnswer.RunAgentUsingAIFunctions(request.Prompt, _chatMessages, cancellationToken))
+            await foreach (var piece in _agentAnswer.RunAgentUsingAIFunctions(request, _chatMessages, cancellationToken))
             {
                 await Response.WriteAsync(piece);
                 await Response.Body.FlushAsync();
@@ -122,6 +122,7 @@ namespace YourNamespace.Controllers
     public class ChatRequest
     {
         public string Prompt { get; set; } = string.Empty;
+        public IFormFile? File { get; set; }
     }
     public class AgentDecision
     {

@@ -24,11 +24,19 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddChatClient(new OllamaChatClient(
     new Uri("http://localhost:11434"), "llama3.1")).UseFunctionInvocation();
+
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<ILLMSDecision, LLMSDecision>();
+
 builder.Services.AddScoped<IAgentAnswer, AgentAnswer>();
-builder.Services.AddSingleton<IAgentTool, CalculatorTool>();
-builder.Services.AddSingleton<IAgentTool, GetTimeTool>();
-builder.Services.AddSingleton<IAgentTool, GetDateTool>();
+builder.Services.AddScoped<FileContext>();
+
+builder.Services.AddScoped<IAgentTool, CalculatorTool>();
+builder.Services.AddScoped<IAgentTool, GetTimeTool>();
+builder.Services.AddScoped<IAgentTool, GetDateTool>();
+builder.Services.AddScoped<IAgentTool, FileReaderTool>();
+builder.Services.AddScoped<IAgentTool, WebSearchTool>();
+builder.Services.AddScoped<ITestInterface, TestInterface>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -52,4 +60,4 @@ app.MapControllers();
 app.Run();
 
 
-record ChatRequest(string Prompt);
+//record ChatRequest(string Prompt);

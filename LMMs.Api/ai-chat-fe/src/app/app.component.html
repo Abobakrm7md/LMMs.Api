@@ -1,18 +1,30 @@
-
-
 <div class="chat-container">
   <h1>AI Chat</h1>
   
   <div class="chat-box">
     <div *ngFor="let msg of chatHistory" class="message" [ngClass]="msg.role">
-      <!-- <div class="bubble"> <div style="white-space: pre-wrap;" >{{msg.text}}</div></div> -->
-      <div class="bubble"> <div [innerHTML]="formatMessage(msg.text)"></div></div>
+      <div class="bubble">
+        <div [innerHTML]="formatMessage(msg.text)"></div>
+      </div>
     </div>
   </div>
 
   <div class="controls">
     <textarea [(ngModel)]="prompt" placeholder="Type your message..."></textarea>
+
+    <!-- ✅ File Preview -->
+    <div *ngIf="selectedFile" class="file-preview">
+      📎 {{ selectedFile.name }}
+      <span (click)="removeFile()">✕</span>
+    </div>
+
     <div class="buttons">
+      <!-- ✅ Hidden input + trigger button -->
+      <input #fileInput type="file" hidden
+             accept=".txt,.pdf,.csv,.json,.docx"
+             (change)="onFileSelected($event)" />
+
+      <button (click)="fileInput.click()" [disabled]="isStreaming">📎</button>
       <button (click)="sendPrompt()" [disabled]="isStreaming">Send</button>
       <button (click)="stopResponse()" *ngIf="isStreaming">Stop</button>
     </div>
