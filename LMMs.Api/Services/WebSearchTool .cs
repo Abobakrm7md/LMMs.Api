@@ -88,11 +88,6 @@ namespace LMMs.Api.Services
             return sb.Length > 0 ? sb.ToString() : "No results found.";
         }
 
-        public async Task<string> ExecuteAsync(
-            IReadOnlyDictionary<string, object?> args, CancellationToken ct)
-        {
-            var query = args["query"]?.ToString() ?? "";
-            return await Search(query);
-        }
+     
     }
 }
