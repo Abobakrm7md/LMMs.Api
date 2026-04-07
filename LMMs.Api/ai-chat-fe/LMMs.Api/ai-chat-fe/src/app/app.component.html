@@ -1,7 +1,7 @@
 <div class="chat-container">
   <h1>AI Chat</h1>
   
-  <div #chatBox class="chat-box">
+  <div class="chat-box">
     <div *ngFor="let msg of chatHistory" class="message" [ngClass]="msg.role">
       <div class="bubble">
         <div [innerHTML]="formatMessage(msg.text)"></div>

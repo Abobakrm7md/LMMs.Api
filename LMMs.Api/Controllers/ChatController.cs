@@ -1,11 +1,9 @@
 ﻿using LMMs.Api.Interfaces;
-using LMMs.Api.Services;
+using LMMs.Api.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
-using System.Data;
-using System.Text.Json;
 
-namespace YourNamespace.Controllers
+namespace LMMs.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -34,6 +32,8 @@ namespace YourNamespace.Controllers
                 await Response.Body.FlushAsync();
                 Console.Write(piece);
             }
+
+            #region Commented
             //var finalResponse = await  _agentAnswer.RunAgent(request.Prompt, _chatMessages, Response, cancellationToken);
 
 
@@ -71,58 +71,56 @@ namespace YourNamespace.Controllers
             //{
             //    _chatMessages.Add(new ChatMessage(ChatRole.Assistant, finalResponse));
             //}
+            #endregion
+        
         }
-        private async Task<AgentDecision> GetDecision(ChatRequest request)
-        {
-            var prompt = $@"
-                        You are an AI Agent.
+        #region Commented
+        //private async Task<AgentDecision> GetDecision(ChatRequest request)
+        //{
+        //    var prompt = $@"
+        //                You are an AI Agent.
 
-                        Your job is ONLY to decide what to do next.
+        //                Your job is ONLY to decide what to do next.
 
-                        STRICT RULES:
-                        - DO NOT answer the user
-                        - ONLY return JSON
+        //                STRICT RULES:
+        //                - DO NOT answer the user
+        //                - ONLY return JSON
 
-                        Examples:
+        //                Examples:
 
-                        User: hello
-                        Response:
-                        {{ ""action"": ""answer"" }}
+        //                User: hello
+        //                Response:
+        //                {{ ""action"": ""answer"" }}
 
-                        User: what is 5 * 10?
-                        Response:
-                        {{ ""action"": ""tool"", ""tool"": ""calculator"", ""input"": ""5 * 10"" }}
+        //                User: what is 5 * 10?
+        //                Response:
+        //                {{ ""action"": ""tool"", ""tool"": ""calculator"", ""input"": ""5 * 10"" }}
 
-                        User: what time is it?
-                        Response:
-                        {{ ""action"": ""tool"", ""tool"": ""time"" }}
+        //                User: what time is it?
+        //                Response:
+        //                {{ ""action"": ""tool"", ""tool"": ""time"" }}
 
-                        Now decide:
+        //                Now decide:
 
-                        User: {request.Prompt}
-                        ";
+        //                User: {request.Prompt}
+        //                ";
 
-            var response = await _chatClient.GetResponseAsync(prompt);
-            var content = response.Text;
+        //    var response = await _chatClient.GetResponseAsync(prompt);
+        //    var content = response.Text;
 
-            return JsonSerializer.Deserialize<AgentDecision>(content);
-        }
-        private string ExecuteTool(AgentDecision decision)
-        {
-            return decision.tool switch
-            {
-                "calculator" => new DataTable().Compute(decision.input, null).ToString(),
-                "time" => DateTime.Now.ToString(),
-                "date" => DateTime.Now.Date.ToString(),
-                _ => "Unknown tool"
-            };
-        }
-    }
-
-    public class ChatRequest
-    {
-        public string Prompt { get; set; } = string.Empty;
-        public IFormFile? File { get; set; }
+        //    return JsonSerializer.Deserialize<AgentDecision>(content);
+        //}
+        //private string ExecuteTool(AgentDecision decision)
+        //{
+        //    return decision.tool switch
+        //    {
+        //        "calculator" => new DataTable().Compute(decision.input, null).ToString(),
+        //        "time" => DateTime.Now.ToString(),
+        //        "date" => DateTime.Now.Date.ToString(),
+        //        _ => "Unknown tool"
+        //    };
+        //}
+        #endregion
     }
     public class AgentDecision
     {

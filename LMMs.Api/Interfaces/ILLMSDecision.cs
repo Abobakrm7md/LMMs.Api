@@ -1,4 +1,4 @@
-﻿using YourNamespace.Controllers;
+﻿using LMMs.Api.Controllers;
 
 namespace LMMs.Api.Interfaces
 {

@@ -1,8 +1,9 @@
-﻿using LMMs.Api.Interfaces;
+﻿using LMMs.Api.Controllers;
+using LMMs.Api.Interfaces;
+using LMMs.Api.ViewModels;
 using Microsoft.Extensions.AI;
 using System.Data;
 using System.Text;
-using YourNamespace.Controllers;
 
 namespace LMMs.Api.Services
 {
@@ -130,6 +131,8 @@ namespace LMMs.Api.Services
             await file.CopyToAsync(stream, cancellationToken);
             _fileContext.FileName = savedFileName;
         }
+
+        #region Manual call and manage loop
         //private void AddSystemPrompet(List<ChatMessage> chatMessages)
         //{
         //    chatMessages.Insert(0, new ChatMessage(ChatRole.System,
@@ -142,79 +145,78 @@ namespace LMMs.Api.Services
 
         //            ONLY return the final human-readable answer."));
         //}
-        #region Manual call and manage loop
-        public async Task<string> RunAgent(string userPrompt, List<ChatMessage> chatMessages, HttpResponse httpResponse, CancellationToken cancellationToken)
-        {
-            #region Old
-            var usedTools = new HashSet<string>();
-            var context = $"User: {userPrompt}";
-            string finalAnswer = "";
+        //public async Task<string> RunAgent(string userPrompt, List<ChatMessage> chatMessages, HttpResponse httpResponse, CancellationToken cancellationToken)
+        //{
+        //    #region Old
+        //    var usedTools = new HashSet<string>();
+        //    var context = $"User: {userPrompt}";
+        //    string finalAnswer = "";
 
-            for (int step = 0; step < 5; step++)
-            {
+        //    for (int step = 0; step < 5; step++)
+        //    {
 
-                var decision = await _lLMSDecision.GetDecision(context);
-                // 🔥 Tool case
-                if (decision.action == "tool")
-                {
-                    if (!usedTools.Contains(decision.tool))
-                    {
-                        var result = ExecuteTool(decision);
-                        finalAnswer += "  **  " + result;
-                        context += $"\nTool ({decision.tool}) result: {result}";
-                        usedTools.Add(decision.tool);
-                    }
-                    continue;
-                }
+        //        var decision = await _lLMSDecision.GetDecision(context);
+        //        // 🔥 Tool case
+        //        if (decision.action == "tool")
+        //        {
+        //            if (!usedTools.Contains(decision.tool))
+        //            {
+        //                var result = ExecuteTool(decision);
+        //                finalAnswer += "  **  " + result;
+        //                context += $"\nTool ({decision.tool}) result: {result}";
+        //                usedTools.Add(decision.tool);
+        //            }
+        //            continue;
+        //        }
 
-                // 🔥 Answer case
-                if (decision.action == "answer")
-                {
-                    var finalrResponse = await GenerateFinalAnswer(chatMessages, httpResponse, cancellationToken);
-                    Console.WriteLine("finalrResponse :  " + finalrResponse);
+        //        // 🔥 Answer case
+        //        if (decision.action == "answer")
+        //        {
+        //            var finalrResponse = await GenerateFinalAnswer(chatMessages, httpResponse, cancellationToken);
+        //            Console.WriteLine("finalrResponse :  " + finalrResponse);
 
-                    return finalrResponse;
-                }
-            }
+        //            return finalrResponse;
+        //        }
+        //    }
 
-            await httpResponse.WriteAsync(finalAnswer);
-            Console.WriteLine("finalAnswer :  " + finalAnswer);
-            return finalAnswer;
+        //    await httpResponse.WriteAsync(finalAnswer);
+        //    Console.WriteLine("finalAnswer :  " + finalAnswer);
+        //    return finalAnswer;
 
-            #endregion
-        }
+        //    #endregion
+        //}
 
        
 
-        private string ExecuteTool(AgentDecision decision)
-        {
-            return decision.tool switch
-            {
-                "calculator" => new DataTable().Compute(decision.input, null).ToString(),
-                "time" => DateTime.Now.ToString(),
-                "date" => DateTime.Now.Date.ToString(),
-                _ => "Unknown tool"
-            };
-        }
-        private async Task<string> GenerateFinalAnswer(List<ChatMessage> _chatMessages, HttpResponse httpResponse, CancellationToken cancellationToken)
-        {
-            string finalResponse = "";
+        //private string ExecuteTool(AgentDecision decision)
+        //{
+        //    return decision.tool switch
+        //    {
+        //        "calculator" => new DataTable().Compute(decision.input, null).ToString(),
+        //        "time" => DateTime.Now.ToString(),
+        //        "date" => DateTime.Now.Date.ToString(),
+        //        _ => "Unknown tool"
+        //    };
+        //}
+        //private async Task<string> GenerateFinalAnswer(List<ChatMessage> _chatMessages, HttpResponse httpResponse, CancellationToken cancellationToken)
+        //{
+        //    string finalResponse = "";
 
-            await foreach (var item in _chatClient.GetStreamingResponseAsync(
-                    _chatMessages, cancellationToken: cancellationToken))
-            {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
+        //    await foreach (var item in _chatClient.GetStreamingResponseAsync(
+        //            _chatMessages, cancellationToken: cancellationToken))
+        //    {
+        //        if (cancellationToken.IsCancellationRequested)
+        //            break;
 
-                var text = item.Text ?? string.Empty;
+        //        var text = item.Text ?? string.Empty;
 
-                finalResponse += text;
+        //        finalResponse += text;
 
-                await httpResponse.WriteAsync(text);
-                await httpResponse.Body.FlushAsync();
-            }
-            return finalResponse;
-        }
+        //        await httpResponse.WriteAsync(text);
+        //        await httpResponse.Body.FlushAsync();
+        //    }
+        //    return finalResponse;
+        //}
         #endregion
     }
 
