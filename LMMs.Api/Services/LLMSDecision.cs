@@ -1,7 +1,7 @@
 ﻿using LMMs.Api.Interfaces;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
-using LMMs.Api.Controllers;
+using LMMs.Api.ViewModels;
 
 namespace LMMs.Api.Services
 {

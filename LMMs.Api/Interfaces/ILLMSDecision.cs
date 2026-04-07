@@ -1,4 +1,4 @@
-﻿using LMMs.Api.Controllers;
+﻿using LMMs.Api.ViewModels;
 
 namespace LMMs.Api.Interfaces
 {
