@@ -1,16 +1,35 @@
 <div class="chat-container">
   <h1>AI Chat</h1>
   
-  <div class="chat-box">
-    <div *ngFor="let msg of chatHistory" class="message" [ngClass]="msg.role">
+  <div #chatBox class="chat-box">
+    <div *ngFor="let msg of chatHistory; let i = index" class="message" [ngClass]="msg.role">
       <div class="bubble">
-        <div [innerHTML]="formatMessage(msg.text)"></div>
+        <div
+          *ngIf="isStreaming && msg.role === 'assistant' && !msg.text.trim() && i === chatHistory.length - 1"
+          class="thinking-loader"
+          aria-live="polite"
+        >
+          <span class="thinking-label">Thinking</span>
+          <span class="thinking-dots">
+            <span></span><span></span><span></span>
+          </span>
+        </div>
+        <div *ngIf="msg.text.trim()" [innerHTML]="formatMessage(msg.text)"></div>
       </div>
     </div>
   </div>
 
   <div class="controls">
     <textarea [(ngModel)]="prompt" placeholder="Type your message..."></textarea>
+
+    <label class="web-search-toggle">
+      <input type="checkbox" [(ngModel)]="enableTools" [disabled]="isStreaming" />
+      <span>Use tools (time, calculator, file tools…)</span>
+    </label>
+    <label class="web-search-toggle">
+      <input type="checkbox" [(ngModel)]="enableWebSearch" [disabled]="isStreaming || !enableTools" />
+      <span>Include web search</span>
+    </label>
 
     <!-- ✅ File Preview -->
     <div *ngIf="selectedFile" class="file-preview">

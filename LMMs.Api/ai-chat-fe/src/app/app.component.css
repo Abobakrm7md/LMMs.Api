@@ -58,6 +58,19 @@ h1 {
   gap: 10px;
 }
 
+.web-search-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #495057;
+  user-select: none;
+}
+
+.web-search-toggle input {
+  margin: 0;
+}
+
 textarea {
   width: 100%;
   height: 60px;
@@ -68,9 +81,24 @@ textarea {
   resize: none;
 }
 
+.voice-status {
+  min-height: 18px;
+  font-size: 13px;
+}
+
+.listening-text {
+  color: #0b7285;
+  font-weight: 600;
+}
+
+.voice-error {
+  color: #c92a2a;
+}
+
 .buttons {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 button {
@@ -86,14 +114,46 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button:first-child {
+.buttons > button:first-child {
   background: #007bff;
   color: white;
 }
 
-button:last-child {
+.buttons button.active-mic {
+  background: #e03131;
+  color: white;
+}
+
+.buttons button:nth-last-child(1) {
   background: #dc3545;
   color: white;
+}
+
+.message-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.message-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.icon-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
 }
 .bubble pre {
   background-color: #1e1e2f;

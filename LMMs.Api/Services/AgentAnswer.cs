@@ -11,19 +11,37 @@ namespace LMMs.Api.Services
     {
         private readonly ILLMSDecision _lLMSDecision;
         private readonly IChatClient _chatClient;
-        private readonly IEnumerable<IAgentTool> _tools;
-        private readonly AITool[] _cachedTools;
+        private readonly IReadOnlyList<IAgentTool> _tools;
         private readonly FileContext _fileContext; // ✅ مشترك مع الـ Controller
 
         public AgentAnswer(IChatClient chatClient, IEnumerable<IAgentTool> tools, FileContext fileContext)
         {
             _chatClient = chatClient;
             _tools = tools.ToList();
-
-            _cachedTools = _tools
-                .Select(t => AIFunctionFactory.Create(t.GetFunction()))
-                .ToArray();
             _fileContext = fileContext;
+        }
+
+        private static bool IsWebSearchTool(IAgentTool t) =>
+            string.Equals(t.Name, "web_search", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsFileReaderTool(IAgentTool t) =>
+            string.Equals(t.Name, "read_file", StringComparison.OrdinalIgnoreCase);
+
+        private AITool[] GetAiToolsForRequest(ChatRequest request)
+        {
+            // No tools at all → model can only answer in plain text (fixes "uses a tool every time").
+            if (!request.EnableTools && request.File is null)
+                return [];
+
+            IEnumerable<IAgentTool> selected = _tools;
+
+            if (!request.EnableTools && request.File is not null)
+                selected = selected.Where(IsFileReaderTool);
+            else if (request.EnableTools && !request.EnableWebSearch)
+                selected = selected.Where(t => !IsWebSearchTool(t));
+            else if (request.EnableTools && request.File is null)
+                selected = selected.Where(t => !IsFileReaderTool(t));
+            return selected.Select(t => AIFunctionFactory.Create(t.GetFunction())).ToArray();
         }
 
 
@@ -31,19 +49,21 @@ namespace LMMs.Api.Services
         {
             if (request.File is not null)
             {
-                request.Prompt = $"{request.Prompt}\n[There is an attached file: {request.File.FileName}, use read_file tool to read it]";
+                request.Prompt =
+                    $"{request.Prompt}\n[An optional attachment is available: {request.File.FileName}. Call read_file only if answering requires the file contents.]";
                 await SetFile(request.File, cancellationToken);
             }
             chatMessages.Add(new ChatMessage(ChatRole.User, request.Prompt));
 
+            var aiTools = GetAiToolsForRequest(request);
             var options = new ChatOptions
             {
-                Tools = _cachedTools,
+                Tools = aiTools,
                 ToolMode = ChatToolMode.Auto,
                 Temperature = 0.1f
             };
 
-            var messagesWillSend = BuildMessagesToSend(chatMessages);
+            var messagesWillSend = BuildMessagesToSend(chatMessages, aiTools.Length > 0);
             //AddSystemPrompet(messagesWillSend);
             var responseStream = _chatClient.GetStreamingResponseAsync(messagesWillSend, options, cancellationToken);
 
@@ -62,11 +82,11 @@ namespace LMMs.Api.Services
 
             TrimHistory(chatMessages, 5);
         }
-        public List<ChatMessage> BuildMessagesToSend(List<ChatMessage> chatMessages)
+        public List<ChatMessage> BuildMessagesToSend(List<ChatMessage> chatMessages, bool toolsOffered = true)
         {
             var result = new List<ChatMessage>
             {
-                new(ChatRole.System, GetSystemPrompt())
+                new(ChatRole.System, GetSystemPrompt(toolsOffered))
             };
 
             const int Budget = 5000;
@@ -88,15 +108,38 @@ namespace LMMs.Api.Services
         private static int EstimateTokens(ChatMessage msg) =>
             msg.Contents.OfType<TextContent>().Sum(c => c.Text?.Length ?? 0) / 4 + 4;
 
-        private static string GetSystemPrompt() =>
-             @"You are a helpful assistant.
+        private static string GetSystemPrompt(bool toolsOffered)
+        {
+            if (!toolsOffered)
+            {
+                return """
+                    You are a helpful assistant.
+                    For this message, no tools are available. Answer from your knowledge and the text the user sent.
+                    Do not pretend to call tools or search the web.
+                    """;
+            }
 
-                    When you use a tool:
-                    - DO NOT show the tool call
-                    - DO NOT return JSON
-                    - DO NOT explain the process
+            return """
+                You are a helpful assistant.
 
-                    ONLY return the final human-readable answer.";
+                Tools are available, but use them only when strictly necessary:
+                - Exact current date/time/"what day is today" → time/date tools
+                - User needs live web facts and web_search is available → web_search
+                - Answering requires the attached file → read_file
+                - Exact arithmetic → calculator
+
+                Do not use tools for general chat, explanations, code help, or questions you can answer without tools.
+
+                Never use web_search for stack traces, exceptions, or pasted logs — reason from the text.
+
+                When you use a tool:
+                - DO NOT show the tool call
+                - DO NOT return JSON
+                - DO NOT explain the process
+
+                ONLY return the final human-readable answer.
+                """;
+        }
         private static void TrimHistory(List<ChatMessage> chatMessages, int maxMessages = 20)
         {
             if (chatMessages.Count <= maxMessages) return;

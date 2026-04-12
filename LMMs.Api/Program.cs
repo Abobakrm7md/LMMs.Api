@@ -31,6 +31,7 @@ builder.Services.AddScoped<ILLMSDecision, LLMSDecision>();
 builder.Services.AddScoped<IAgentAnswer, AgentAnswer>();
 builder.Services.AddScoped<FileContext>();
 
+// IAgentTool must be Scoped (not Singleton): FileReaderTool consumes scoped FileContext per request.
 builder.Services.AddScoped<IAgentTool, CalculatorTool>();
 builder.Services.AddScoped<IAgentTool, GetTimeTool>();
 builder.Services.AddScoped<IAgentTool, GetDateTool>();

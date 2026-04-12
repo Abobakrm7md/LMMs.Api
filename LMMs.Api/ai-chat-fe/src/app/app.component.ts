@@ -3,6 +3,33 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { marked } from 'marked';
 
+interface SpeechRecognitionEventLike extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionLike extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+interface BrowserWindowWithSpeech extends Window {
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+  SpeechRecognition?: new () => SpeechRecognitionLike;
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  createdAt: Date;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -13,12 +40,22 @@ import { marked } from 'marked';
 export class AppComponent {
   @ViewChild('chatBox') private chatBox?: ElementRef<HTMLDivElement>;
   prompt: string = '';
-  chatHistory: { role: 'user' | 'assistant'; text: string }[] = [];
+  chatHistory: ChatMessage[] = [];
   isStreaming = false;
   abortController: AbortController | null = null;
+  isListening = false;
+  voiceError = '';
+  copiedMessageIndex: number | null = null;
+  speakingMessageIndex: number | null = null;
+  private speechRecognition: SpeechRecognitionLike | null = null;
+  private dictationSeedPrompt = '';
 
   // ✅ الجديد
   selectedFile: File | null = null;
+  /** When true, API registers tools (calculator, time, …). Off by default so the model answers in plain text. */
+  enableTools = false;
+  /** When enableTools is true, also expose web search. */
+  enableWebSearch = false;
 
   onFileSelected(event: Event) {
     const input = event.target as HTMLInputElement;
@@ -31,11 +68,119 @@ export class AppComponent {
     this.selectedFile = null;
   }
 
+  toggleVoiceInput() {
+    if (this.isListening) {
+      this.stopVoiceInput();
+      return;
+    }
+    this.startVoiceInput();
+  }
+
+  private startVoiceInput() {
+    this.voiceError = '';
+    const browserWindow = window as BrowserWindowWithSpeech;
+    const SpeechRecognitionCtor = browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionCtor) {
+      this.voiceError = 'Voice input is not supported in this browser.';
+      return;
+    }
+
+    this.speechRecognition = new SpeechRecognitionCtor();
+    this.dictationSeedPrompt = this.prompt.trim();
+    this.speechRecognition.lang = 'en-US';
+    this.speechRecognition.interimResults = true;
+    this.speechRecognition.continuous = true;
+
+    this.speechRecognition.onresult = (event: SpeechRecognitionEventLike) => {
+      let completeTranscript = '';
+
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        const text = result[0]?.transcript ?? '';
+        completeTranscript += `${text} `;
+      }
+
+      // Rebuild dictated text from recognition snapshot to avoid duplicated phrases.
+      this.prompt = this.joinPrompts(
+        this.dictationSeedPrompt,
+        completeTranscript.trim()
+      );
+    };
+
+    this.speechRecognition.onerror = () => {
+      this.voiceError = 'Microphone permission denied or speech recognition failed.';
+      this.isListening = false;
+    };
+
+    this.speechRecognition.onend = () => {
+      this.isListening = false;
+    };
+
+    this.speechRecognition.start();
+    this.isListening = true;
+  }
+
+  private stopVoiceInput() {
+    this.speechRecognition?.stop();
+    this.isListening = false;
+    this.dictationSeedPrompt = this.prompt.trim();
+  }
+
+  private joinPrompts(base: string, incoming: string): string {
+    const left = base.trim();
+    const right = incoming.trim();
+    if (!left) return right;
+    if (!right) return left;
+    return `${left} ${right}`;
+  }
+
+  async copyResponse(text: string, index: number) {
+    if (!text.trim()) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      this.copiedMessageIndex = index;
+      setTimeout(() => {
+        if (this.copiedMessageIndex === index) this.copiedMessageIndex = null;
+      }, 1500);
+    } catch {
+      this.voiceError = 'Failed to copy message.';
+    }
+  }
+
+  toggleReadAloud(text: string, index: number) {
+    if (!text.trim() || !('speechSynthesis' in window)) {
+      this.voiceError = 'Text-to-speech is not supported in this browser.';
+      return;
+    }
+
+    if (this.speakingMessageIndex === index) {
+      window.speechSynthesis.cancel();
+      this.speakingMessageIndex = null;
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.onend = () => {
+      this.speakingMessageIndex = null;
+    };
+    utterance.onerror = () => {
+      this.voiceError = 'Unable to read this response aloud.';
+      this.speakingMessageIndex = null;
+    };
+    this.speakingMessageIndex = index;
+    window.speechSynthesis.speak(utterance);
+  }
+
   async sendPrompt() {
     if (!this.prompt.trim() && !this.selectedFile) return;
+    if (this.isListening) this.stopVoiceInput();
+    const userPrompt = this.prompt;
 
-    this.chatHistory.push({ role: 'user', text: this.prompt });
-    let currentResponse = { role: 'assistant' as const, text: '' };
+    this.chatHistory.push({ role: 'user', text: userPrompt, createdAt: new Date() });
+    let currentResponse: ChatMessage = { role: 'assistant', text: '', createdAt: new Date() };
     this.chatHistory.push(currentResponse);
     this.scrollToBottom();
 
@@ -48,6 +193,8 @@ export class AppComponent {
     
       const formData = new FormData();
       formData.append('prompt', this.prompt);
+      formData.append('enableTools', String(this.enableTools));
+      formData.append('enableWebSearch', String(this.enableTools && this.enableWebSearch));
     if (this.selectedFile) {
 
       formData.append('file', this.selectedFile);
@@ -90,7 +237,10 @@ export class AppComponent {
       }
     } finally {
       streamedText += decoder.decode();
-      currentResponse = { ...currentResponse, text: streamedText };
+      currentResponse = {
+        ...currentResponse,
+        text: streamedText
+      };
       this.chatHistory[this.chatHistory.length - 1] = currentResponse;
       this.scrollToBottom();
     }
@@ -128,6 +278,13 @@ export class AppComponent {
 formatMessage(text: string): string {
   if (!text) return '';
   return marked.parse(text, { gfm: true, breaks: true }) as string;
+}
+
+formatMessageTime(date: Date): string {
+  return new Intl.DateTimeFormat([], {
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
 }
 
 private scrollToBottom(): void {

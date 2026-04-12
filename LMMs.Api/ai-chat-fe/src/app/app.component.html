@@ -15,12 +15,27 @@
           </span>
         </div>
         <div *ngIf="msg.text.trim()" [innerHTML]="formatMessage(msg.text)"></div>
+        <div class="message-meta" *ngIf="msg.role === 'user'">
+          <span>{{ formatMessageTime(msg.createdAt) }}</span>
+        </div>
+        <div class="message-actions" *ngIf="msg.role === 'assistant' && msg.text.trim()">
+          <button class="icon-btn" type="button" (click)="copyResponse(msg.text, i)" [title]="copiedMessageIndex === i ? 'Copied' : 'Copy response'">
+            {{ copiedMessageIndex === i ? '✅' : '📋' }}
+          </button>
+          <button class="icon-btn" type="button" (click)="toggleReadAloud(msg.text, i)" [title]="speakingMessageIndex === i ? 'Stop listening' : 'Listen response'">
+            {{ speakingMessageIndex === i ? '⏹️' : '🔊' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="controls">
-    <textarea [(ngModel)]="prompt" placeholder="Type your message..."></textarea>
+    <textarea [(ngModel)]="prompt" placeholder="Ask anything..."></textarea>
+    <div class="voice-status" *ngIf="isListening || voiceError">
+      <span *ngIf="isListening" class="listening-text">🎙️ Listening...</span>
+      <span *ngIf="voiceError" class="voice-error">{{ voiceError }}</span>
+    </div>
 
     <!-- ✅ File Preview -->
     <div *ngIf="selectedFile" class="file-preview">
@@ -28,12 +43,24 @@
       <span (click)="removeFile()">✕</span>
     </div>
 
+    <label class="web-search-toggle">
+      <input type="checkbox" [(ngModel)]="enableTools" [disabled]="isStreaming" />
+      <span>Use tools (time, calculator, file tools…)</span>
+    </label>
+    <label class="web-search-toggle">
+      <input type="checkbox" [(ngModel)]="enableWebSearch" [disabled]="isStreaming || !enableTools" />
+      <span>Include web search</span>
+    </label>
+
     <div class="buttons">
       <!-- ✅ Hidden input + trigger button -->
       <input #fileInput type="file" hidden
              accept=".txt,.pdf,.csv,.json,.docx"
              (change)="onFileSelected($event)" />
 
+      <button (click)="toggleVoiceInput()" [disabled]="isStreaming" [class.active-mic]="isListening">
+        {{ isListening ? 'Stop Mic' : '🎤' }}
+      </button>
       <button (click)="fileInput.click()" [disabled]="isStreaming">📎</button>
       <button (click)="sendPrompt()" [disabled]="isStreaming">Send</button>
       <button (click)="stopResponse()" *ngIf="isStreaming">Stop</button>

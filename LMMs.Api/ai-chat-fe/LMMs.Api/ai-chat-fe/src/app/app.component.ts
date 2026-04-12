@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { marked } from 'marked';
@@ -11,6 +11,7 @@ import { marked } from 'marked';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
+  @ViewChild('chatBox') private chatBox?: ElementRef<HTMLDivElement>;
   prompt: string = '';
   chatHistory: { role: 'user' | 'assistant'; text: string }[] = [];
   isStreaming = false;
@@ -18,6 +19,8 @@ export class AppComponent {
 
   // ✅ الجديد
   selectedFile: File | null = null;
+  enableTools = false;
+  enableWebSearch = false;
 
   onFileSelected(event: Event) {
     const input = event.target as HTMLInputElement;
@@ -36,6 +39,7 @@ export class AppComponent {
     this.chatHistory.push({ role: 'user', text: this.prompt });
     let currentResponse = { role: 'assistant' as const, text: '' };
     this.chatHistory.push(currentResponse);
+    this.scrollToBottom();
 
     this.isStreaming = true;
     this.abortController = new AbortController();
@@ -46,6 +50,8 @@ export class AppComponent {
     
       const formData = new FormData();
       formData.append('prompt', this.prompt);
+      formData.append('enableTools', String(this.enableTools));
+      formData.append('enableWebSearch', String(this.enableTools && this.enableWebSearch));
     if (this.selectedFile) {
 
       formData.append('file', this.selectedFile);
@@ -60,19 +66,37 @@ export class AppComponent {
       signal: this.abortController.signal
     });
 
+    if (!response.ok || !response.body) {
+      currentResponse = {
+        ...currentResponse,
+        text: `Request failed: ${response.status} ${response.statusText}`
+      };
+      this.chatHistory[this.chatHistory.length - 1] = currentResponse;
+      this.isStreaming = false;
+      return;
+    }
+
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
+    let streamedText = '';
 
-    while (this.isStreaming) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (this.isStreaming) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
 
-      const chunk = decoder.decode(value, { stream: true });
-      for (const line of chunk.split('\n')) {
-        if (!line.trim()) continue;
-        currentResponse = { ...currentResponse, text: currentResponse.text + line };
+        // Preserve all whitespace/newlines so markdown lists and paragraphs stay readable.
+        streamedText += decoder.decode(value, { stream: true });
+        currentResponse = { ...currentResponse, text: streamedText };
         this.chatHistory[this.chatHistory.length - 1] = currentResponse;
+        this.scrollToBottom();
       }
+    } finally {
+      streamedText += decoder.decode();
+      currentResponse = { ...currentResponse, text: streamedText };
+      this.chatHistory[this.chatHistory.length - 1] = currentResponse;
+      this.scrollToBottom();
     }
 
     this.isStreaming = false;
@@ -106,68 +130,17 @@ export class AppComponent {
 // }
 
 formatMessage(text: string): string {
-  if (!text) return "";
-
-  
-  // 1. Escape HTML to prevent injection
-  let formatted = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  // 2. Handle multi-line code blocks: ```lang\ncode\n```
-  formatted = formatted.replace(/```([\s\S]*?)```/g, (match, code) => {
-    return `<pre><code>${code.trim()}</code></pre>`;
-  });
-
-  // 3. Handle inline code: `code`
-  formatted = formatted.replace(/`([^`]+)`/g, "<code>$1</code>");
-
-  // 4. Bold and italic
-  formatted = formatted.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-  formatted = formatted.replace(/\*(.*?)\*/g, "<em>$1</em>");
-
-  // 5. Bulleted lists (- or *) and numbered lists (1.)
-  formatted = formatted.replace(
-    /(^|\n)(\s*[-*]\s+.+(\n\s*[-*]\s+.+)*)/g,
-    (match) => {
-      const items = match
-        .trim()
-        .split(/\n/)
-        .map(line => line.replace(/^\s*[-*]\s+/, "").trim())
-        .map(item => `<li>${item}</li>`)
-        .join("");
-      return `<ul>${items}</ul>`;
-    }
-  );
-
-  formatted = formatted.replace(
-    /(^|\n)(\s*\d+\.\s+.+(\n\s*\d+\.\s+.+)*)/g,
-    (match) => {
-      const items = match
-        .trim()
-        .split(/\n/)
-        .map(line => line.replace(/^\s*\d+\.\s+/, "").trim())
-        .map(item => `<li>${item}</li>`)
-        .join("");
-      return `<ol>${items}</ol>`;
-    }
-  );
-
-  // 6. Line breaks -> <br>, but not inside <pre> or <ul>/<ol>
-  formatted = formatted.replace(/(?<!<\/(pre|ul|ol|li)>)\n/g, "<br>");
-
-  // 7. Convert multiple consecutive newlines into paragraphs
-  formatted = formatted.replace(/(<br>\s*){2,}/g, "</p><p>");
-  formatted = `<p>${formatted}</p>`;
-
-  return formatted;
-}
-
-
-async formatMessage1(text: string): Promise<string> {
   if (!text) return '';
-  return await marked.parse(text);
+  return marked.parse(text, { gfm: true, breaks: true }) as string;
 }
+
+private scrollToBottom(): void {
+  requestAnimationFrame(() => {
+    const element = this.chatBox?.nativeElement;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
+  });
+}
+
 
 }

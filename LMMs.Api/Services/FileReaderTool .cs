@@ -28,7 +28,7 @@ namespace LMMs.Api.Services
 
         public Delegate GetFunction() => ReadFile;
 
-        [Description("Read the content of the attached file. Supports .txt, .csv, .json, .pdf, .docx")]
+        [Description("Read the uploaded file only when the user's question requires its contents. Supports .txt, .csv, .json, .pdf, .docx. If the question does not depend on the file, do not call this.")]
         private async Task<string> ReadFile(
         [Description("Pass 'attached' to read the uploaded file")] string source = "attached")
         {
