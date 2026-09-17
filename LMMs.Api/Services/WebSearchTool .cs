@@ -27,7 +27,7 @@ namespace LMMs.Api.Services
             [Description("The search query")] string query)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, "https://google.serper.dev/search");
-            request.Headers.Add("X-API-KEY", "01eaecb91f2baa53705423793d46ea45655b50b8");
+            request.Headers.Add("X-API-KEY", _apiKey);
             var content = new StringContent($"{{\"q\":\"{query}\"}}", null, "application/json");
             request.Content = content;
             var response = await _http.SendAsync(request);

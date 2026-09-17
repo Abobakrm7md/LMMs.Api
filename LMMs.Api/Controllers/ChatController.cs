@@ -30,7 +30,7 @@ namespace LMMs.Api.Controllers
             {
                 await Response.WriteAsync(piece);
                 await Response.Body.FlushAsync();
-                Console.Write(piece);
+               // Console.Write(piece);
             }
 
             #region Commented

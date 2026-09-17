@@ -9,10 +9,10 @@ namespace LMMs.Api.Services
 {
     public class AgentAnswer : IAgentAnswer
     {
-        private readonly ILLMSDecision _lLMSDecision;
+        //private readonly ILLMSDecision _lLMSDecision;
         private readonly IChatClient _chatClient;
         private readonly IReadOnlyList<IAgentTool> _tools;
-        private readonly FileContext _fileContext; // ✅ مشترك مع الـ Controller
+        private readonly FileContext _fileContext;
 
         public AgentAnswer(IChatClient chatClient, IEnumerable<IAgentTool> tools, FileContext fileContext)
         {
@@ -164,10 +164,9 @@ namespace LMMs.Api.Services
         {
             string? savedFileName = null;
             var filesFolder = Path.Combine(Directory.GetCurrentDirectory(), "Files");
-            Directory.CreateDirectory(filesFolder); // ينشئها لو مش موجودة
+            Directory.CreateDirectory(filesFolder);
 
-            // ✅ اسم unique عشان متتوورش ملفات بنفس الاسم
-            savedFileName = $"{Guid.NewGuid()}_{Path.GetFileName(file.FileName)}";
+            savedFileName = $"{Guid.NewGuid()}_{Path.GetFileName(file?.FileName)}";
             var savePath = Path.Combine(filesFolder, savedFileName);
 
             await using var stream = File.Create(savePath);
