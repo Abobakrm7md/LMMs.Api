@@ -15,7 +15,8 @@ namespace LMMs.Api.Services
         {
             try
             {
-                var result = new DataTable().Compute(input, null);
+                var expression = NormalizeExpression(input);
+                var result = new DataTable().Compute(expression, null);
                 return result.ToString();
             }
             catch
@@ -23,6 +24,9 @@ namespace LMMs.Api.Services
                 return "Invalid calculation";
             }
         }
+
+        private static string NormalizeExpression(string input) =>
+            input.Replace("×", "*").Replace("÷", "/").Replace("−", "-");
 
     }
 }

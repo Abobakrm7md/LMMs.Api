@@ -1,9 +1,8 @@
+using LMMs.Api.Agents;
 using LMMs.Api.Interfaces;
+using LMMs.Api.Planning;
 using LMMs.Api.Services;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using OllamaSharp.Models.Chat;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,7 +26,10 @@ builder.Services.AddChatClient(new OllamaChatClient(
 
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ILLMSDecision, LLMSDecision>();
-
+builder.Services.AddScoped<IToolInvoker, AgentToolInvoker>();
+builder.Services.AddScoped<IPlanner, ChatClientPlanner>();
+builder.Services.AddScoped<IPlanExecutor, SequentialPlanExecutor>();
+builder.Services.AddScoped<IAgent, PlanningAgent>();
 builder.Services.AddScoped<IAgentAnswer, AgentAnswer>();
 builder.Services.AddScoped<FileContext>();
 
