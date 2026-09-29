@@ -42,7 +42,7 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
+                  "maximumWarning": "6kB",
                   "maximumError": "8kB"
                 }
               ],
@@ -63,7 +63,8 @@
               "buildTarget": "ai-chat:build:production"
             },
             "development": {
-              "buildTarget": "ai-chat:build:development"
+              "buildTarget": "ai-chat:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"
