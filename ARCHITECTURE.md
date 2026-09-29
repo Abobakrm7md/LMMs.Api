@@ -12,7 +12,7 @@ Agent.Tests ─────────────→ Agent.Application/Domain
 
 - **Domain** contains conversation, plan, step, execution directive, and tool-result concepts. It has no package or project dependencies.
 - **Application** owns the agent use case, planning, execution, tool registry, and ports for chat, attachments, search, and conversation storage. It does not reference Ollama, ASP.NET Core, HTTP clients, or concrete storage.
-- **Infrastructure** adapts `Microsoft.Extensions.AI.IChatClient`/Ollama to `IChatModel`, implements external search and attachment storage, and contains independently registered tools.
+- **Infrastructure** adapts `Microsoft.Extensions.AI.IChatClient`/Ollama to `IChatModel`, implements SQL Server persistence, JWT authentication, external search and attachment storage, and contains independently registered tools.
 - **Frontend** is a standalone Angular project with its own Node dependencies and build lifecycle. It communicates with the API over HTTP and is not built or served by the backend.
 - **API** maps multipart HTTP input to `AgentRequest`, streams the application result, and acts as the composition root.
 

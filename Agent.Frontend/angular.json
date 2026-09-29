@@ -42,7 +42,7 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
+                  "maximumWarning": "6kB",
                   "maximumError": "8kB"
                 }
               ],
@@ -63,7 +63,8 @@
               "buildTarget": "agent-frontend:build:production"
             },
             "development": {
-              "buildTarget": "agent-frontend:build:development"
+              "buildTarget": "agent-frontend:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"

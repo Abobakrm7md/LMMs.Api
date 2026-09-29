@@ -1,69 +1,81 @@
-<div class="chat-container">
-  <h1>AI Chat</h1>
-  
-  <div #chatBox class="chat-box">
-    <div *ngFor="let msg of chatHistory; let i = index" class="message" [ngClass]="msg.role">
-      <div class="bubble">
-        <div
-          *ngIf="isStreaming && msg.role === 'assistant' && !msg.text.trim() && i === chatHistory.length - 1"
-          class="thinking-loader"
-          aria-live="polite"
-        >
-          <span class="thinking-label">Thinking</span>
-          <span class="thinking-dots">
-            <span></span><span></span><span></span>
-          </span>
+<main class="app-shell">
+  <section class="auth-card" *ngIf="!isAuthenticated">
+    <div class="brand">
+      <span class="brand-mark">✦</span>
+      <div><h1>AI Chat</h1><p>Sign in to keep your conversations.</p></div>
+    </div>
+    <div class="auth-tabs">
+      <button type="button" [class.active]="authMode === 'login'" (click)="switchAuthMode('login')">Sign in</button>
+      <button type="button" [class.active]="authMode === 'register'" (click)="switchAuthMode('register')">Create account</button>
+    </div>
+    <form (ngSubmit)="submitAuthentication()">
+      <label>Email <input name="email" type="email" [(ngModel)]="email" autocomplete="email" required /></label>
+      <label *ngIf="authMode === 'register'">Username <input name="userName" [(ngModel)]="userName" autocomplete="username" required /></label>
+      <label *ngIf="authMode === 'register'">Display name <input name="displayName" [(ngModel)]="displayName" autocomplete="name" required /></label>
+      <label>Password <input name="password" type="password" [(ngModel)]="password" [autocomplete]="authMode === 'login' ? 'current-password' : 'new-password'" required /></label>
+      <p class="form-hint" *ngIf="authMode === 'register'">Use a password with at least 12 characters.</p>
+      <p class="error" *ngIf="authError">{{ authError }}</p>
+      <button class="primary" type="submit" [disabled]="isAuthenticating">{{ isAuthenticating ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account' }}</button>
+    </form>
+  </section>
+
+  <section class="chat-layout" *ngIf="isAuthenticated">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div><strong>AI Chat</strong><span>{{ currentUser?.displayName || 'Signed in' }}</span></div>
+        <button class="icon" type="button" title="Sign out" (click)="logout()">↪</button>
+      </div>
+      <button class="new-chat" type="button" (click)="createConversation()" [disabled]="isStreaming">＋ New chat</button>
+      <p class="sidebar-error" *ngIf="error">{{ error }}</p>
+      <div class="conversation-list" *ngIf="!isLoadingConversations; else loadingConversations">
+        <button
+          class="conversation"
+          *ngFor="let conversation of conversations; trackBy: trackConversation"
+          type="button"
+          [class.selected]="selectedConversation?.id === conversation.id"
+          (click)="selectConversation(conversation)"
+          [disabled]="isStreaming">
+          <strong>{{ conversation.title }}</strong>
+          <span>{{ formatDate(conversation.updatedAt) }}</span>
+        </button>
+        <p class="empty-list" *ngIf="!conversations.length">No conversations yet.</p>
+      </div>
+      <ng-template #loadingConversations><p class="empty-list">Loading conversations…</p></ng-template>
+    </aside>
+
+    <section class="chat-panel">
+      <header class="chat-header">
+        <div>
+          <h2>{{ selectedConversation?.title || 'New conversation' }}</h2>
+          <p *ngIf="selectedConversation">Started {{ formatDate(selectedConversation.createdAt) }}</p>
         </div>
-        <div *ngIf="msg.text.trim()" [innerHTML]="formatMessage(msg.text)"></div>
-        <div class="message-meta" *ngIf="msg.role === 'user'">
-          <span>{{ formatMessageTime(msg.createdAt) }}</span>
+        <button class="delete" type="button" *ngIf="selectedConversation" (click)="deleteConversation()" [disabled]="isStreaming">Delete</button>
+      </header>
+
+      <div class="messages" aria-live="polite">
+        <button class="load-older" type="button" *ngIf="nextBeforeSequence" (click)="loadOlderMessages()" [disabled]="isLoadingMessages">Load older messages</button>
+        <div class="empty-thread" *ngIf="!messages.length && !isLoadingMessages">
+          <h3>Start a new conversation</h3><p>Your messages and answers will be saved here.</p>
         </div>
-        <div class="message-actions" *ngIf="msg.role === 'assistant' && msg.text.trim()">
-          <button class="icon-btn" type="button" (click)="copyResponse(msg.text, i)" [title]="copiedMessageIndex === i ? 'Copied' : 'Copy response'">
-            {{ copiedMessageIndex === i ? '✅' : '📋' }}
-          </button>
-          <button class="icon-btn" type="button" (click)="toggleReadAloud(msg.text, i)" [title]="speakingMessageIndex === i ? 'Stop listening' : 'Listen response'">
-            {{ speakingMessageIndex === i ? '⏹️' : '🔊' }}
-          </button>
+        <div class="message" *ngFor="let message of messages; trackBy: trackMessage" [class.user]="message.role === 'User'" [class.assistant]="message.role === 'Assistant'">
+          <div class="bubble">
+            <div class="thinking" *ngIf="message.role === 'Assistant' && message.status === 'Streaming' && !message.content">Thinking<span></span><span></span><span></span></div>
+            <div *ngIf="message.content" [innerHTML]="formatMessage(message.content)"></div>
+            <small>{{ message.role === 'User' ? 'You' : 'Assistant' }} · {{ formatDate(message.createdAt) }}<ng-container *ngIf="message.status === 'Cancelled'"> · stopped</ng-container><ng-container *ngIf="message.status === 'Failed'"> · failed</ng-container></small>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
 
-  <div class="controls">
-    <textarea [(ngModel)]="prompt" placeholder="Ask anything..."></textarea>
-    <div class="voice-status" *ngIf="isListening || voiceError">
-      <span *ngIf="isListening" class="listening-text">🎙️ Listening...</span>
-      <span *ngIf="voiceError" class="voice-error">{{ voiceError }}</span>
-    </div>
-
-    <!-- ✅ File Preview -->
-    <div *ngIf="selectedFile" class="file-preview">
-      📎 {{ selectedFile.name }}
-      <span (click)="removeFile()">✕</span>
-    </div>
-
-    <label class="web-search-toggle">
-      <input type="checkbox" [(ngModel)]="enableTools" [disabled]="isStreaming" />
-      <span>Use tools (time, calculator, file tools…)</span>
-    </label>
-    <label class="web-search-toggle">
-      <input type="checkbox" [(ngModel)]="enableWebSearch" [disabled]="isStreaming || !enableTools" />
-      <span>Include web search</span>
-    </label>
-
-    <div class="buttons">
-      <!-- ✅ Hidden input + trigger button -->
-      <input #fileInput type="file" hidden
-             accept=".txt,.pdf,.csv,.json,.docx"
-             (change)="onFileSelected($event)" />
-
-      <button (click)="toggleVoiceInput()" [disabled]="isStreaming" [class.active-mic]="isListening">
-        {{ isListening ? 'Stop Mic' : '🎤' }}
-      </button>
-      <button (click)="fileInput.click()" [disabled]="isStreaming">📎</button>
-      <button (click)="sendPrompt()" [disabled]="isStreaming">Send</button>
-      <button (click)="stopResponse()" *ngIf="isStreaming">Stop</button>
-    </div>
-  </div>
-</div>
+      <form class="composer" (ngSubmit)="sendMessage()">
+        <textarea name="prompt" [(ngModel)]="prompt" placeholder="Ask anything…" [disabled]="isStreaming" maxlength="16000" required></textarea>
+        <div class="composer-options">
+          <label><input type="checkbox" name="enableTools" [(ngModel)]="enableTools" [disabled]="isStreaming" /> Use calculator, date, and time tools</label>
+          <label><input type="checkbox" name="enableWebSearch" [(ngModel)]="enableWebSearch" [disabled]="isStreaming || !enableTools" /> Include web search</label>
+          <span class="spacer"></span>
+          <button type="button" class="stop" *ngIf="isStreaming" (click)="stopResponse()">Stop</button>
+          <button type="submit" class="primary" [disabled]="isStreaming || !prompt.trim()">Send</button>
+        </div>
+      </form>
+    </section>
+  </section>
+</main>

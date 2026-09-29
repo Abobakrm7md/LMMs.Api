@@ -9,7 +9,7 @@ npm ci
 npm start
 ```
 
-The development application runs at `http://localhost:4200` and currently calls the backend development endpoint at `https://localhost:7098/api/chat`.
+The development application runs at `http://localhost:4200`. Requests under `/api` are forwarded to the backend at `https://localhost:7098` by `proxy.conf.json`.
 
 Start the backend separately from the repository root:
 

@@ -288,6 +288,9 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
+# Local secrets
+appsettings.Local.json
+
 # Visual Studio 6 build log
 *.plg
 

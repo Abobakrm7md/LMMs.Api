@@ -1,33 +1,49 @@
-import { Component, ElementRef, ViewChild } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { marked } from 'marked';
 
-interface SpeechRecognitionEventLike extends Event {
-  resultIndex: number;
-  results: SpeechRecognitionResultList;
+interface CurrentUser {
+  id: string;
+  email: string;
+  userName: string;
+  displayName: string;
 }
 
-interface SpeechRecognitionLike extends EventTarget {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: Event) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
+interface AuthResponse {
+  token: { value: string; expiresAt: string };
+  user: CurrentUser;
 }
 
-interface BrowserWindowWithSpeech extends Window {
-  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-  SpeechRecognition?: new () => SpeechRecognitionLike;
+interface ConversationSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt?: string | null;
 }
 
 interface ChatMessage {
-  role: 'user' | 'assistant';
-  text: string;
-  createdAt: Date;
+  id: string;
+  sequenceNumber: number;
+  role: 'User' | 'Assistant';
+  status: 'Streaming' | 'Completed' | 'Cancelled' | 'Failed';
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  modelName?: string | null;
+}
+
+interface ConversationDetail extends ConversationSummary {
+  messagePage: { messages: ChatMessage[]; nextBeforeSequence?: number | null };
+}
+
+interface StreamEvent {
+  type: string;
+  userMessageId?: string;
+  assistantMessageId?: string;
+  text?: string;
+  status?: string;
 }
 
 @Component({
@@ -37,263 +53,317 @@ interface ChatMessage {
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
-export class AppComponent {
-  @ViewChild('chatBox') private chatBox?: ElementRef<HTMLDivElement>;
-  prompt: string = '';
-  chatHistory: ChatMessage[] = [];
-  isStreaming = false;
-  abortController: AbortController | null = null;
-  isListening = false;
-  voiceError = '';
-  copiedMessageIndex: number | null = null;
-  speakingMessageIndex: number | null = null;
-  private speechRecognition: SpeechRecognitionLike | null = null;
-  private dictationSeedPrompt = '';
+export class AppComponent implements OnInit {
+  private readonly apiBase = '/api';
+  private readonly tokenStorageKey = 'lmms.access-token';
 
-  // ✅ الجديد
-  selectedFile: File | null = null;
-  /** When true, API registers tools (calculator, time, …). Off by default so the model answers in plain text. */
+  authMode: 'login' | 'register' = 'login';
+  email = '';
+  userName = '';
+  displayName = '';
+  password = '';
+  authError = '';
+  isAuthenticating = false;
+
+  token = '';
+  currentUser: CurrentUser | null = null;
+  conversations: ConversationSummary[] = [];
+  selectedConversation: ConversationSummary | null = null;
+  messages: ChatMessage[] = [];
+  nextBeforeSequence: number | null = null;
+  prompt = '';
   enableTools = false;
-  /** When enableTools is true, also expose web search. */
   enableWebSearch = false;
+  isLoadingConversations = false;
+  isLoadingMessages = false;
+  isStreaming = false;
+  error = '';
+  private abortController: AbortController | null = null;
 
-  onFileSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files?.length) {
-      this.selectedFile = input.files[0];
+  async ngOnInit(): Promise<void> {
+    this.token = sessionStorage.getItem(this.tokenStorageKey) ?? '';
+    if (this.token) {
+      await this.loadConversations();
     }
   }
 
-  removeFile() {
-    this.selectedFile = null;
+  get isAuthenticated(): boolean {
+    return !!this.token;
   }
 
-  toggleVoiceInput() {
-    if (this.isListening) {
-      this.stopVoiceInput();
-      return;
-    }
-    this.startVoiceInput();
-  }
-
-  private startVoiceInput() {
-    this.voiceError = '';
-    const browserWindow = window as BrowserWindowWithSpeech;
-    const SpeechRecognitionCtor = browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition;
-
-    if (!SpeechRecognitionCtor) {
-      this.voiceError = 'Voice input is not supported in this browser.';
-      return;
-    }
-
-    this.speechRecognition = new SpeechRecognitionCtor();
-    this.dictationSeedPrompt = this.prompt.trim();
-    this.speechRecognition.lang = 'en-US';
-    this.speechRecognition.interimResults = true;
-    this.speechRecognition.continuous = true;
-
-    this.speechRecognition.onresult = (event: SpeechRecognitionEventLike) => {
-      let completeTranscript = '';
-
-      for (let i = 0; i < event.results.length; i++) {
-        const result = event.results[i];
-        const text = result[0]?.transcript ?? '';
-        completeTranscript += `${text} `;
-      }
-
-      // Rebuild dictated text from recognition snapshot to avoid duplicated phrases.
-      this.prompt = this.joinPrompts(
-        this.dictationSeedPrompt,
-        completeTranscript.trim()
-      );
-    };
-
-    this.speechRecognition.onerror = () => {
-      this.voiceError = 'Microphone permission denied or speech recognition failed.';
-      this.isListening = false;
-    };
-
-    this.speechRecognition.onend = () => {
-      this.isListening = false;
-    };
-
-    this.speechRecognition.start();
-    this.isListening = true;
-  }
-
-  private stopVoiceInput() {
-    this.speechRecognition?.stop();
-    this.isListening = false;
-    this.dictationSeedPrompt = this.prompt.trim();
-  }
-
-  private joinPrompts(base: string, incoming: string): string {
-    const left = base.trim();
-    const right = incoming.trim();
-    if (!left) return right;
-    if (!right) return left;
-    return `${left} ${right}`;
-  }
-
-  async copyResponse(text: string, index: number) {
-    if (!text.trim()) return;
+  async submitAuthentication(): Promise<void> {
+    this.authError = '';
+    this.isAuthenticating = true;
     try {
-      await navigator.clipboard.writeText(text);
-      this.copiedMessageIndex = index;
-      setTimeout(() => {
-        if (this.copiedMessageIndex === index) this.copiedMessageIndex = null;
-      }, 1500);
-    } catch {
-      this.voiceError = 'Failed to copy message.';
+      const endpoint = this.authMode === 'register' ? '/auth/register' : '/auth/login';
+      const payload = this.authMode === 'register'
+        ? { email: this.email, userName: this.userName, displayName: this.displayName, password: this.password }
+        : { emailOrUserName: this.email, password: this.password };
+      const response = await this.api<AuthResponse>(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }, false);
+      this.token = response.token.value;
+      this.currentUser = response.user;
+      sessionStorage.setItem(this.tokenStorageKey, this.token);
+      this.password = '';
+      await this.loadConversations();
+    } catch (error) {
+      this.authError = this.errorMessage(error, 'Unable to authenticate.');
+    } finally {
+      this.isAuthenticating = false;
     }
   }
 
-  toggleReadAloud(text: string, index: number) {
-    if (!text.trim() || !('speechSynthesis' in window)) {
-      this.voiceError = 'Text-to-speech is not supported in this browser.';
-      return;
-    }
-
-    if (this.speakingMessageIndex === index) {
-      window.speechSynthesis.cancel();
-      this.speakingMessageIndex = null;
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.onend = () => {
-      this.speakingMessageIndex = null;
-    };
-    utterance.onerror = () => {
-      this.voiceError = 'Unable to read this response aloud.';
-      this.speakingMessageIndex = null;
-    };
-    this.speakingMessageIndex = index;
-    window.speechSynthesis.speak(utterance);
+  switchAuthMode(mode: 'login' | 'register'): void {
+    this.authMode = mode;
+    this.authError = '';
   }
 
-  async sendPrompt() {
-    if (!this.prompt.trim() && !this.selectedFile) return;
-    if (this.isListening) this.stopVoiceInput();
-    const userPrompt = this.prompt;
+  logout(): void {
+    this.abortController?.abort();
+    this.token = '';
+    this.currentUser = null;
+    this.conversations = [];
+    this.selectedConversation = null;
+    this.messages = [];
+    this.prompt = '';
+    sessionStorage.removeItem(this.tokenStorageKey);
+  }
 
-    this.chatHistory.push({ role: 'user', text: userPrompt, createdAt: new Date() });
-    let currentResponse: ChatMessage = { role: 'assistant', text: '', createdAt: new Date() };
-    this.chatHistory.push(currentResponse);
-    this.scrollToBottom();
+  async loadConversations(): Promise<void> {
+    if (!this.token) return;
+    this.isLoadingConversations = true;
+    this.error = '';
+    try {
+      this.conversations = await this.api<ConversationSummary[]>('/conversations?take=50');
+      if (this.conversations.length && !this.selectedConversation) {
+        await this.selectConversation(this.conversations[0]);
+      }
+    } catch (error) {
+      this.error = this.errorMessage(error, 'Unable to load conversations.');
+    } finally {
+      this.isLoadingConversations = false;
+    }
+  }
 
+  async createConversation(): Promise<void> {
+    this.error = '';
+    try {
+      const conversation = await this.api<ConversationSummary>('/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      this.conversations = [conversation, ...this.conversations];
+      this.selectedConversation = conversation;
+      this.messages = [];
+      this.nextBeforeSequence = null;
+    } catch (error) {
+      this.error = this.errorMessage(error, 'Unable to create a conversation.');
+    }
+  }
+
+  async selectConversation(conversation: ConversationSummary): Promise<void> {
+    if (this.isStreaming || this.selectedConversation?.id === conversation.id) return;
+    this.selectedConversation = conversation;
+    this.isLoadingMessages = true;
+    this.error = '';
+    try {
+      const detail = await this.api<ConversationDetail>(`/conversations/${conversation.id}?take=100`);
+      this.selectedConversation = this.toSummary(detail);
+      this.messages = detail.messagePage.messages;
+      this.nextBeforeSequence = detail.messagePage.nextBeforeSequence ?? null;
+    } catch (error) {
+      this.error = this.errorMessage(error, 'Unable to load this conversation.');
+    } finally {
+      this.isLoadingMessages = false;
+    }
+  }
+
+  async loadOlderMessages(): Promise<void> {
+    if (!this.selectedConversation || !this.nextBeforeSequence || this.isLoadingMessages) return;
+    this.isLoadingMessages = true;
+    try {
+      const page = await this.api<ConversationDetail>(
+        `/conversations/${this.selectedConversation.id}?beforeSequence=${this.nextBeforeSequence}&take=100`);
+      this.messages = [...page.messagePage.messages, ...this.messages];
+      this.nextBeforeSequence = page.messagePage.nextBeforeSequence ?? null;
+    } catch (error) {
+      this.error = this.errorMessage(error, 'Unable to load older messages.');
+    } finally {
+      this.isLoadingMessages = false;
+    }
+  }
+
+  async deleteConversation(): Promise<void> {
+    if (!this.selectedConversation || this.isStreaming) return;
+    const conversation = this.selectedConversation;
+    if (!confirm(`Delete “${conversation.title}”? This cannot be undone.`)) return;
+
+    try {
+      await this.api<void>(`/conversations/${conversation.id}`, { method: 'DELETE' });
+      this.conversations = this.conversations.filter(item => item.id !== conversation.id);
+      this.selectedConversation = null;
+      this.messages = [];
+      this.nextBeforeSequence = null;
+      if (this.conversations.length) await this.selectConversation(this.conversations[0]);
+    } catch (error) {
+      this.error = this.errorMessage(error, 'Unable to delete this conversation.');
+    }
+  }
+
+  async sendMessage(): Promise<void> {
+    const prompt = this.prompt.trim();
+    if (!prompt || this.isStreaming) return;
+    this.error = '';
+
+    if (!this.selectedConversation) {
+      await this.createConversation();
+      if (!this.selectedConversation) return;
+    }
+
+    const conversation = this.selectedConversation;
+    const timestamp = new Date().toISOString();
+    const localUser: ChatMessage = {
+      id: `local-user-${Date.now()}`,
+      sequenceNumber: Number.MAX_SAFE_INTEGER - 1,
+      role: 'User', status: 'Completed', content: prompt, createdAt: timestamp, updatedAt: timestamp
+    };
+    const localAssistant: ChatMessage = {
+      id: `local-assistant-${Date.now()}`,
+      sequenceNumber: Number.MAX_SAFE_INTEGER,
+      role: 'Assistant', status: 'Streaming', content: '', createdAt: timestamp, updatedAt: timestamp
+    };
+    this.messages = [...this.messages, localUser, localAssistant];
+    this.prompt = '';
     this.isStreaming = true;
     this.abortController = new AbortController();
 
-    // ✅ لو في ملف استخدم FormData، لو مفيش استخدم JSON عادي
-    let body: FormData | string;
-    let headers: Record<string, string> = {};
-    
-      const formData = new FormData();
-      formData.append('prompt', this.prompt);
-      formData.append('enableTools', String(this.enableTools));
-      formData.append('enableWebSearch', String(this.enableTools && this.enableWebSearch));
-    if (this.selectedFile) {
-
-      formData.append('file', this.selectedFile);
-      // ❌ متحطش Content-Type مع FormData — المتصفح بيحطه تلقائياً مع الـ boundary
-    } 
-      body = formData;
-
-    const response = await fetch('https://localhost:7098/api/chat', {
-      method: 'POST',
-      headers,
-      body: formData,
-      signal: this.abortController.signal
-    });
-
-    if (!response.ok || !response.body) {
-      currentResponse = {
-        ...currentResponse,
-        text: `Request failed: ${response.status} ${response.statusText}`
-      };
-      this.chatHistory[this.chatHistory.length - 1] = currentResponse;
-      this.isStreaming = false;
-      return;
-    }
-
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let streamedText = '';
+    const form = new FormData();
+    form.append('prompt', prompt);
+    form.append('enableTools', String(this.enableTools));
+    form.append('enableWebSearch', String(this.enableTools && this.enableWebSearch));
 
     try {
-      while (this.isStreaming) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (!value) continue;
+      const response = await fetch(`${this.apiBase}/conversations/${conversation.id}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.token}` },
+        body: form,
+        signal: this.abortController.signal
+      });
+      if (!response.ok || !response.body) throw new Error(await this.readError(response));
 
-        // Preserve all whitespace/newlines so markdown lists and paragraphs stay readable.
-        streamedText += decoder.decode(value, { stream: true });
-        currentResponse = { ...currentResponse, text: streamedText };
-        this.chatHistory[this.chatHistory.length - 1] = currentResponse;
-        this.scrollToBottom();
+      await this.readEventStream(response, localUser, localAssistant);
+      localAssistant.status = 'Completed';
+      this.promoteConversation(conversation.id);
+    } catch (error) {
+      if ((error as DOMException)?.name === 'AbortError') {
+        localAssistant.status = 'Cancelled';
+      } else {
+        localAssistant.status = 'Failed';
+        localAssistant.content ||= this.errorMessage(error, 'The assistant could not complete this response.');
+        this.error = localAssistant.content;
       }
     } finally {
-      streamedText += decoder.decode();
-      currentResponse = {
-        ...currentResponse,
-        text: streamedText
-      };
-      this.chatHistory[this.chatHistory.length - 1] = currentResponse;
-      this.scrollToBottom();
+      this.isStreaming = false;
+      this.abortController = null;
     }
-
-    this.isStreaming = false;
-    this.prompt = '';
-    this.selectedFile = null; // ✅ امسح الملف بعد الإرسال
   }
-  stopResponse() {
-    this.isStreaming = false;
+
+  stopResponse(): void {
     this.abortController?.abort();
   }
-//   formatMessage(text: string): string {
-//   // Escape HTML
-//   let formatted = text
-//     .replace(/&/g, "&amp;")
-//     .replace(/</g, "&lt;")
-//     .replace(/>/g, "&gt;");
 
-//   // Handle code blocks ```...```
-//   formatted = formatted.replace(/```([^`]+)```/g, "<pre><code>$1</code></pre>");
+  formatMessage(text: string): string {
+    return text ? marked.parse(text, { gfm: true, breaks: true }) as string : '';
+  }
 
-//   // Handle bold **text**
-//   formatted = formatted.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+  formatDate(value?: string | null): string {
+    return value ? new Intl.DateTimeFormat([], { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '';
+  }
 
-//   // Handle line breaks
-//   formatted = formatted.replace(/\n/g, "<br>");
+  trackConversation(_: number, conversation: ConversationSummary): string { return conversation.id; }
+  trackMessage(_: number, message: ChatMessage): string { return message.id; }
 
-//   // Handle bullet points
-//   formatted = formatted.replace(/^\s*[-*]\s+(.*)$/gm, "• $1");
+  private async readEventStream(response: Response, user: ChatMessage, assistant: ChatMessage): Promise<void> {
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-//   return formatted;
-// }
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const frames = buffer.split('\n\n');
+      buffer = frames.pop() ?? '';
+      frames.forEach(frame => this.applyStreamFrame(frame, user, assistant));
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) this.applyStreamFrame(buffer, user, assistant);
+  }
 
-formatMessage(text: string): string {
-  if (!text) return '';
-  return marked.parse(text, { gfm: true, breaks: true }) as string;
-}
+  private applyStreamFrame(frame: string, user: ChatMessage, assistant: ChatMessage): void {
+    const data = frame.split('\n').find(line => line.startsWith('data: '));
+    if (!data) return;
+    const event = JSON.parse(data.substring(6)) as StreamEvent;
+    if (event.type === 'message-start') {
+      if (event.userMessageId) user.id = event.userMessageId;
+      if (event.assistantMessageId) assistant.id = event.assistantMessageId;
+    } else if (event.type === 'delta') {
+      assistant.content += event.text ?? '';
+    } else if (event.type === 'completed') {
+      assistant.status = 'Completed';
+    } else if (event.type === 'error') {
+      assistant.status = 'Failed';
+      assistant.content ||= event.text ?? 'The assistant could not complete this response.';
+    }
+  }
 
-formatMessageTime(date: Date): string {
-  return new Intl.DateTimeFormat([], {
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date);
-}
+  private async api<T>(path: string, init: RequestInit = {}, includeAuthorization = true): Promise<T> {
+    const headers = new Headers(init.headers);
+    if (includeAuthorization && this.token) headers.set('Authorization', `Bearer ${this.token}`);
+    const response = await fetch(`${this.apiBase}${path}`, { ...init, headers });
+    if (response.status === 401 && includeAuthorization) this.logout();
+    if (!response.ok) throw new Error(await this.readError(response));
+    if (response.status === 204) return undefined as T;
+    return await response.json() as T;
+  }
 
-private scrollToBottom(): void {
-  requestAnimationFrame(() => {
-    const element = this.chatBox?.nativeElement;
-    if (!element) return;
-    element.scrollTop = element.scrollHeight;
-  });
-}
+  private async readError(response: Response): Promise<string> {
+    try {
+      const body = await response.json() as { detail?: string; title?: string };
+      return body.detail ?? body.title ?? `Request failed (${response.status}).`;
+    } catch {
+      return `Request failed (${response.status}).`;
+    }
+  }
 
+  private promoteConversation(conversationId: string): void {
+    const index = this.conversations.findIndex(item => item.id === conversationId);
+    if (index < 0) return;
+    const updated = { ...this.conversations[index], updatedAt: new Date().toISOString(), lastMessageAt: new Date().toISOString() };
+    this.conversations = [updated, ...this.conversations.filter(item => item.id !== conversationId)];
+    this.selectedConversation = updated;
+  }
 
+  private toSummary(detail: ConversationDetail): ConversationSummary {
+    return {
+      id: detail.id,
+      title: detail.title,
+      createdAt: detail.createdAt,
+      updatedAt: detail.updatedAt,
+      lastMessageAt: detail.lastMessageAt
+    };
+  }
+
+  private titleFromPrompt(prompt: string): string {
+    const title = prompt.replace(/\s+/g, ' ').trim();
+    return title.length <= 80 ? title : `${title.slice(0, 77)}...`;
+  }
+
+  private errorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
 }

@@ -17,7 +17,7 @@ export class PaymentComponent implements AfterViewInit {
           amount: 1000,
           currency: 'SAR',
           description: 'Coffee Order #1',
-          publishable_api_key: 'pk_test_mwxvM7LuU1coAmTgigjErrbs5YvAaZFveCR9J4f4',
+          publishable_api_key: '', // Configure a public payment key through the deployment environment before enabling this page,
           callback_url: 'https://moyasar.com/thanks',
           supported_networks: ['visa', 'mastercard', 'mada'],
           methods: ['creditcard']

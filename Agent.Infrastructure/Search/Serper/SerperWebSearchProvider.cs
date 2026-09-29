@@ -9,11 +9,13 @@ public sealed class SerperWebSearchProvider(HttpClient httpClient, SerperOptions
     public async Task<string> SearchAsync(string query, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(options.ApiKey)) return "Web search is not configured.";
+        query = query.Trim();
+        if (query.Length is 0 or > 500) return "A web search query must contain 1-500 characters.";
         using var request = new HttpRequestMessage(HttpMethod.Post, options.Endpoint);
         request.Headers.Add("X-API-KEY", options.ApiKey);
         request.Content = JsonContent.Create(new { q = query });
         using var response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode) return "Web search is temporarily unavailable.";
         var data = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         return Parse(data);
     }

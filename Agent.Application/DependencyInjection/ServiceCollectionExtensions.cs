@@ -1,5 +1,8 @@
 using Agent.Application.Agents;
+using Agent.Application.Authentication;
+using Agent.Application.Conversations;
 using Agent.Application.Execution;
+using Agent.Application.Persistence;
 using Agent.Application.Planning;
 using Agent.Application.Tools;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,7 +16,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPlanner, ChatModelPlanner>();
         services.AddScoped<IAgentExecutor, AgentExecutor>();
         services.AddScoped<IToolRegistry, ToolRegistry>();
-        services.AddScoped<IAgent, PlanningAgent>();
+        services.AddScoped<PlanningAgent>();
+        services.AddScoped<IAgent>(provider => provider.GetRequiredService<PlanningAgent>());
+        services.AddScoped<IAgentTurnRunner>(provider => provider.GetRequiredService<PlanningAgent>());
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IConversationTurnService, ConversationTurnService>();
+        services.AddSingleton<IClock, SystemClock>();
         return services;
     }
 }
