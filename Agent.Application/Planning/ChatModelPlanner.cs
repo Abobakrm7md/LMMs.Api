@@ -47,13 +47,13 @@ public sealed class ChatModelPlanner(IChatModel chatModel) : IPlanner
     private static string BuildPlanPrompt(IReadOnlyList<ToolDefinition> tools)
     {
         var p1 = "{{1}}";
-        return $$"""
+        return $$$"""
         You are a planning component for an AI agent. Return ONLY JSON; no markdown or hidden reasoning.
         Decide whether the task can be answered directly, needs one tool, or needs sequential tools.
         Available tools:
-        {{FormatTools(tools)}}
+        {{{FormatTools(tools)}}}
         Use tools only when necessary. Use exact tool and parameter names. Calculator input must be one math expression.
-        Later steps may reference earlier output with {{p1}}. Use * for multiplication.
+        Later steps may reference earlier output with {{{p1}}}. Use * for multiplication.
         JSON: { "goal":"short goal", "kind":"direct|single_tool|multi_step", "steps":[{"id":1,"description":"task","tool":"exact_name","input":{}}] }
         For direct answers, steps must be []. Do not add unnecessary or repeated calls.
         """;
@@ -66,10 +66,10 @@ public sealed class ChatModelPlanner(IChatModel chatModel) : IPlanner
         {request.UserPrompt}
         """;
 
-    private static string BuildAdvicePrompt(IReadOnlyList<ToolDefinition> tools) => $$"""
+    private static string BuildAdvicePrompt(IReadOnlyList<ToolDefinition> tools) => $$$"""
         Decide the next execution action. Return ONLY JSON and no hidden reasoning.
         Available tools:
-        {{FormatTools(tools)}}
+        {{{FormatTools(tools)}}}
         Actions are continue, execute_step, complete, abort.
         JSON: { "action":"continue|execute_step|complete|abort", "reason":"short status", "tool":"tool_name", "description":"step", "input":{} }
         Do not repeat successful calls. Calculator input must be one expression. A date's day may be used as a number when requested.
