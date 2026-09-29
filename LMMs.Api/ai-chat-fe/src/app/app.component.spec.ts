@@ -3,27 +3,18 @@ import { AppComponent } from './app.component';
 
 describe('AppComponent', () => {
   beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [AppComponent],
-    }).compileComponents();
+    await TestBed.configureTestingModule({ imports: [AppComponent] }).compileComponents();
   });
 
-  it('should create the app', () => {
+  it('creates the authenticated chat shell component', () => {
     const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.componentInstance;
-    expect(app).toBeTruthy();
+    expect(fixture.componentInstance).toBeTruthy();
   });
 
-  it(`should have the 'ai-chat' title`, () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.componentInstance;
-    expect(app.title).toEqual('ai-chat');
-  });
-
-  it('should render title', () => {
+  it('starts on the sign-in screen when no session exists', () => {
+    sessionStorage.removeItem('lmms.access-token');
     const fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, ai-chat');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Sign in');
   });
 });

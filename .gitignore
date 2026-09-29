@@ -285,6 +285,10 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
+# Runtime uploads and local secrets
+LMMs.Api/Files/
+appsettings.Local.json
+
 # Visual Studio 6 build log
 *.plg
 
