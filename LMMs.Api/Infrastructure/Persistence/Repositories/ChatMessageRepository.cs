@@ -84,7 +84,7 @@ public sealed class ChatMessageRepository(AppDbContext dbContext) : IChatMessage
         newestFirst.Reverse();
         var nextBeforeSequence = hasMore && newestFirst.Count > 0
             ? newestFirst[0].SequenceNumber
-            : null;
+            : 0;
         return new MessagePageDto(newestFirst, nextBeforeSequence);
     }
 }
