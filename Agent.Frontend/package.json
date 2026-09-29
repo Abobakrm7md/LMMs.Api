@@ -1,5 +1,5 @@
 {
-  "name": "ai-chat",
+  "name": "agent-frontend",
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",

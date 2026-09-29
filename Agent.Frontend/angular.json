@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "ai-chat": {
+    "agent-frontend": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -13,7 +13,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:application",
           "options": {
-            "outputPath": "dist/ai-chat",
+            "outputPath": "dist/agent-frontend",
             "index": "src/index.html",
             "browser": "src/main.ts",
             "polyfills": [
@@ -60,10 +60,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "ai-chat:build:production"
+              "buildTarget": "agent-frontend:build:production"
             },
             "development": {
-              "buildTarget": "ai-chat:build:development"
+              "buildTarget": "agent-frontend:build:development"
             }
           },
           "defaultConfiguration": "development"
