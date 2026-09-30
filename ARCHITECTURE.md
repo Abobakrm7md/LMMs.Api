@@ -1,5 +1,7 @@
 # Agent architecture
 
+> Full documentation lives in [docs/README.md](docs/README.md); the [root README](README.md) covers setup and a project map. This file states the layering rules.
+
 ## Dependency direction
 
 ```text
