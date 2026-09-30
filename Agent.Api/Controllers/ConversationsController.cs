@@ -101,7 +101,7 @@ public sealed class ConversationsController(IConversationTurnService conversatio
         {
             await foreach (var item in conversationService.SendMessageAsync(
                                id,
-                               new SendMessageCommand(request.Prompt, request.EnableTools, request.EnableWebSearch),
+                               new SendMessageCommand(request.Prompt),
                                cancellationToken))
             {
                 await WriteEventAsync(item, cancellationToken);

@@ -5,18 +5,10 @@ public sealed class ToolRegistry : IToolRegistry
     private readonly IReadOnlyList<IAgentTool> _tools;
     public ToolRegistry(IEnumerable<IAgentTool> tools) => _tools = tools.ToList();
 
-    public IReadOnlyList<IAgentTool> Select(bool enableTools, bool enableWebSearch, bool hasAttachment)
-    {
-        if (!enableTools && !hasAttachment) return [];
-        IEnumerable<IAgentTool> selected = _tools;
-        if (!enableTools) selected = selected.Where(t => t.Definition.Category == ToolCategory.File);
-        else
-        {
-            if (!enableWebSearch) selected = selected.Where(t => t.Definition.Category != ToolCategory.WebSearch);
-            if (!hasAttachment) selected = selected.Where(t => t.Definition.Category != ToolCategory.File);
-        }
-        return selected.ToList();
-    }
+    public IReadOnlyList<IAgentTool> Select(bool hasAttachment) =>
+        _tools
+            .Where(tool => hasAttachment || tool.Definition.Category != ToolCategory.File)
+            .ToList();
 
     public IAgentTool? Find(string name, IReadOnlyList<IAgentTool> availableTools)
     {

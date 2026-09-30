@@ -3,7 +3,7 @@ using Agent.Domain.Persistence;
 namespace Agent.Application.Conversations;
 
 public sealed record CreateConversationCommand(string? Title);
-public sealed record SendMessageCommand(string Prompt, bool EnableTools, bool EnableWebSearch);
+public sealed record SendMessageCommand(string Prompt);
 
 public sealed record ConversationSummaryDto(
     Guid Id,

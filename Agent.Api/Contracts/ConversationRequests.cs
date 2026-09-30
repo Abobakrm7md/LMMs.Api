@@ -12,7 +12,4 @@ public sealed class SendConversationMessageRequest
 {
     [Required, StringLength(16_000)]
     public string Prompt { get; init; } = string.Empty;
-
-    public bool EnableTools { get; init; }
-    public bool EnableWebSearch { get; init; }
 }

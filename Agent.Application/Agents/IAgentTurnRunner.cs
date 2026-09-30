@@ -5,9 +5,7 @@ namespace Agent.Application.Agents;
 
 public sealed record AgentTurnRequest(
     string Prompt,
-    IReadOnlyList<AgentHistoryMessage> History,
-    bool EnableTools,
-    bool EnableWebSearch);
+    IReadOnlyList<AgentHistoryMessage> History);
 
 public abstract record AgentTurnEvent;
 public sealed record ToolExecutionCompleted(ToolResult Result) : AgentTurnEvent;

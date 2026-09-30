@@ -14,6 +14,6 @@ public interface IAgentTool
 
 public interface IToolRegistry
 {
-    IReadOnlyList<IAgentTool> Select(bool enableTools, bool enableWebSearch, bool hasAttachment);
+    IReadOnlyList<IAgentTool> Select(bool hasAttachment);
     IAgentTool? Find(string name, IReadOnlyList<IAgentTool> availableTools);
 }
