@@ -72,6 +72,7 @@ export class AppComponent implements OnInit {
   messages: ChatMessage[] = [];
   nextBeforeSequence: number | null = null;
   prompt = '';
+  selectedFile: File | null = null;
   isLoadingConversations = false;
   isLoadingMessages = false;
   isStreaming = false;
@@ -127,6 +128,7 @@ export class AppComponent implements OnInit {
     this.selectedConversation = null;
     this.messages = [];
     this.prompt = '';
+    this.selectedFile = null;
     sessionStorage.removeItem(this.tokenStorageKey);
   }
 
@@ -212,6 +214,27 @@ export class AppComponent implements OnInit {
     }
   }
 
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file) return;
+
+    const extension = file.name.includes('.') ? `.${file.name.split('.').pop()!.toLowerCase()}` : '';
+    const supported = ['.txt', '.csv', '.json', '.xml', '.md', '.pdf', '.docx'];
+    if (!supported.includes(extension) || file.size <= 0 || file.size > 10 * 1024 * 1024) {
+      this.error = 'Upload a non-empty txt, csv, json, xml, md, pdf, or docx file no larger than 10 MB.';
+      return;
+    }
+
+    this.selectedFile = file;
+    this.error = '';
+  }
+
+  removeSelectedFile(): void {
+    if (!this.isStreaming) this.selectedFile = null;
+  }
+
   async sendMessage(): Promise<void> {
     const prompt = this.prompt.trim();
     if (!prompt || this.isStreaming) return;
@@ -223,11 +246,16 @@ export class AppComponent implements OnInit {
     }
 
     const conversation = this.selectedConversation;
+    const attachment = this.selectedFile;
     const timestamp = new Date().toISOString();
     const localUser: ChatMessage = {
       id: `local-user-${Date.now()}`,
       sequenceNumber: Number.MAX_SAFE_INTEGER - 1,
-      role: 'User', status: 'Completed', content: prompt, createdAt: timestamp, updatedAt: timestamp
+      role: 'User',
+      status: 'Completed',
+      content: attachment ? `${prompt}\n\n📎 ${attachment.name}` : prompt,
+      createdAt: timestamp,
+      updatedAt: timestamp
     };
     const localAssistant: ChatMessage = {
       id: `local-assistant-${Date.now()}`,
@@ -241,6 +269,7 @@ export class AppComponent implements OnInit {
 
     const form = new FormData();
     form.append('prompt', prompt);
+    if (attachment) form.append('file', attachment, attachment.name);
 
     try {
       const response = await fetch(`${this.apiBase}/conversations/${conversation.id}/messages`, {
@@ -253,6 +282,7 @@ export class AppComponent implements OnInit {
 
       await this.readEventStream(response, localUser, localAssistant);
       localAssistant.status = 'Completed';
+      this.selectedFile = null;
       this.promoteConversation(conversation.id);
     } catch (error) {
       if ((error as DOMException)?.name === 'AbortError') {

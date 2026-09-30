@@ -3,7 +3,10 @@ using Agent.Domain.Persistence;
 namespace Agent.Application.Conversations;
 
 public sealed record CreateConversationCommand(string? Title);
-public sealed record SendMessageCommand(string Prompt);
+public sealed record SendMessageCommand(
+    string Prompt,
+    string? AttachmentId = null,
+    string? AttachmentName = null);
 
 public sealed record ConversationSummaryDto(
     Guid Id,

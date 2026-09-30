@@ -82,6 +82,31 @@ public sealed class ExecutorTests
 
 public sealed class InfrastructureToolTests
 {
+    [Fact] public async Task AttachmentStore_SavesAndReadsSupportedTextFile()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"agent-attachments-{Guid.NewGuid():N}");
+        try
+        {
+            var store = new Agent.Infrastructure.Files.LocalAttachmentStore(new Agent.Infrastructure.Files.AttachmentStorageOptions
+            {
+                Directory = directory,
+                MaximumBytes = 1024,
+                MaximumCharacters = 100
+            });
+            await using var content = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("attachment contents"));
+
+            var attachment = await store.SaveAsync("notes.txt", content, default);
+            var text = await store.ReadTextAsync(attachment.Id, default);
+
+            Assert.Equal("notes.txt", attachment.OriginalName);
+            Assert.Equal("attachment contents", text);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact] public async Task Calculator_EvaluatesExpressionWithoutExternalService()
     {
         var tool = new Agent.Infrastructure.Tools.Calculator.CalculatorTool();
@@ -93,6 +118,32 @@ public sealed class InfrastructureToolTests
 
 public sealed class AgentOrchestrationTests
 {
+    [Fact] public async Task Attachment_MakesFileToolAvailableWhenPlannerNeedsIt()
+    {
+        var model = new FakeChatModel
+        {
+            Completion = """{"goal":"summarize attachment","kind":"single_tool","steps":[{"id":1,"description":"read attachment","tool":"read_file","input":{"source":"attached"}}]}""",
+            Streamed = "File summary"
+        };
+        string? receivedAttachmentId = null;
+        var fileTool = new StubTool("read_file", ToolCategory.File, context =>
+        {
+            receivedAttachmentId = context.AttachmentId;
+            return "file contents";
+        });
+        var registry = new ToolRegistry([fileTool]);
+        var planner = new ChatModelPlanner(model);
+        var agent = new PlanningAgent(model, planner, new AgentExecutor(registry, planner), registry);
+
+        await foreach (var _ in agent.RunAsync(
+                           new AgentRequest("summarize it", "attachment-1.txt", "notes.txt"),
+                           new Conversation(),
+                           default)) { }
+
+        Assert.Equal("attachment-1.txt", receivedAttachmentId);
+        Assert.Contains(model.StreamMessages, message => message.Content.Contains("file contents"));
+    }
+
     [Fact] public async Task CancelledRequest_StopsBeforePlanning()
     {
         using var cancellation = new CancellationTokenSource();

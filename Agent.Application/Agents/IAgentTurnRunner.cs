@@ -5,7 +5,9 @@ namespace Agent.Application.Agents;
 
 public sealed record AgentTurnRequest(
     string Prompt,
-    IReadOnlyList<AgentHistoryMessage> History);
+    IReadOnlyList<AgentHistoryMessage> History,
+    string? AttachmentId = null,
+    string? AttachmentName = null);
 
 public abstract record AgentTurnEvent;
 public sealed record ToolExecutionCompleted(ToolResult Result) : AgentTurnEvent;

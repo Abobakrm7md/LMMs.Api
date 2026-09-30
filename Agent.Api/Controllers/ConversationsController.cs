@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Agent.Application.Persistence;
 using Agent.Application.Conversations;
+using Agent.Application.Files;
 using Agent.Application.Common;
 using Agent.Api.Contracts;
 using Microsoft.AspNetCore.Authorization;
@@ -11,8 +12,13 @@ namespace Agent.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/conversations")]
-public sealed class ConversationsController(IConversationTurnService conversationService) : ControllerBase
+public sealed class ConversationsController(
+    IConversationTurnService conversationService,
+    IAttachmentStore attachmentStore) : ControllerBase
 {
+    private const long MaximumAttachmentBytes = 10 * 1024 * 1024;
+    private static readonly HashSet<string> SupportedAttachmentExtensions =
+        [".txt", ".csv", ".json", ".xml", ".md", ".pdf", ".docx"];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [HttpPost]
@@ -76,6 +82,8 @@ public sealed class ConversationsController(IConversationTurnService conversatio
     }
 
     [HttpPost("{id:guid}/messages")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(11 * 1024 * 1024)]
     [Produces("text/event-stream")]
     public async Task SendMessage(
         Guid id,
@@ -93,6 +101,27 @@ public sealed class ConversationsController(IConversationTurnService conversatio
             return;
         }
 
+        StoredAttachment? attachment = null;
+        if (request.File is not null)
+        {
+            var extension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
+            if (request.File.Length is <= 0 or > MaximumAttachmentBytes ||
+                !SupportedAttachmentExtensions.Contains(extension))
+            {
+                Response.StatusCode = StatusCodes.Status400BadRequest;
+                await Response.WriteAsJsonAsync(new ProblemDetails
+                {
+                    Title = "Invalid attachment",
+                    Detail = "Upload a non-empty txt, csv, json, xml, md, pdf, or docx file no larger than 10 MB.",
+                    Status = StatusCodes.Status400BadRequest
+                }, cancellationToken);
+                return;
+            }
+
+            await using var fileStream = request.File.OpenReadStream();
+            attachment = await attachmentStore.SaveAsync(request.File.FileName, fileStream, cancellationToken);
+        }
+
         Response.ContentType = "text/event-stream";
         Response.Headers["Cache-Control"] = "no-cache";
         Response.Headers["X-Accel-Buffering"] = "no";
@@ -101,7 +130,7 @@ public sealed class ConversationsController(IConversationTurnService conversatio
         {
             await foreach (var item in conversationService.SendMessageAsync(
                                id,
-                               new SendMessageCommand(request.Prompt),
+                               new SendMessageCommand(request.Prompt, attachment?.Id, attachment?.OriginalName),
                                cancellationToken))
             {
                 await WriteEventAsync(item, cancellationToken);

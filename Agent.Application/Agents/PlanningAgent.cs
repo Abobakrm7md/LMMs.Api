@@ -45,15 +45,28 @@ public sealed class PlanningAgent(IChatModel chatModel, IPlanner planner, IAgent
         AgentTurnRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        var effectivePrompt = request.AttachmentName is null
+            ? request.Prompt
+            : $"{request.Prompt}\n[An optional attachment is available: {request.AttachmentName}. Call read_file only if answering requires its contents.]";
         var conversation = new Conversation();
-        foreach (var item in request.History)
-            conversation.Add(new Message(item.Role == AgentHistoryRole.Assistant ? MessageRole.Assistant : MessageRole.User, item.Content));
+        var currentPromptMapped = false;
+        for (var index = 0; index < request.History.Count; index++)
+        {
+            var item = request.History[index];
+            var isCurrentPrompt = index == request.History.Count - 1
+                                  && item.Role == AgentHistoryRole.User
+                                  && (string.Equals(item.Content, request.Prompt, StringComparison.Ordinal)
+                                      || item.Content.StartsWith(request.Prompt, StringComparison.Ordinal));
+            conversation.Add(new Message(
+                item.Role == AgentHistoryRole.Assistant ? MessageRole.Assistant : MessageRole.User,
+                isCurrentPrompt ? effectivePrompt : item.Content));
+            currentPromptMapped |= isCurrentPrompt;
+        }
 
-        if (conversation.Messages.LastOrDefault() is not { Role: MessageRole.User } last ||
-            !string.Equals(last.Content, request.Prompt, StringComparison.Ordinal))
-            conversation.Add(new Message(MessageRole.User, request.Prompt));
+        if (!currentPromptMapped)
+            conversation.Add(new Message(MessageRole.User, effectivePrompt));
 
-        var command = new AgentRequest(request.Prompt);
+        var command = new AgentRequest(effectivePrompt, request.AttachmentId, request.AttachmentName);
         await foreach (var item in ExecuteTurnAsync(command, conversation, cancellationToken).WithCancellation(cancellationToken))
             yield return item;
     }

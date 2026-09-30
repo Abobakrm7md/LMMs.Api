@@ -94,7 +94,9 @@ public sealed class ConversationTurnService(
             SequenceNumber = ++conversation.NextMessageSequence,
             Role = ConversationMessageRole.User,
             Status = ConversationMessageStatus.Completed,
-            Content = prompt,
+            Content = command.AttachmentName is null
+                ? prompt
+                : $"{prompt}\n\n📎 {command.AttachmentName}",
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -126,7 +128,7 @@ public sealed class ConversationTurnService(
             MaxAgentHistoryMessages,
             MaxAgentHistoryCharacters,
             cancellationToken);
-        var turn = new AgentTurnRequest(prompt, history);
+        var turn = new AgentTurnRequest(prompt, history, command.AttachmentId, command.AttachmentName);
         var response = new StringBuilder();
         var completed = false;
 

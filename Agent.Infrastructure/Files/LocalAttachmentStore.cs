@@ -8,17 +8,47 @@ public sealed class AttachmentStorageOptions
 {
     public string Directory { get; set; } = "Files";
     public int MaximumCharacters { get; set; } = 4000;
+    public long MaximumBytes { get; set; } = 10 * 1024 * 1024;
 }
 
 public sealed class LocalAttachmentStore(AttachmentStorageOptions options) : IAttachmentStore
 {
+    private static readonly HashSet<string> SupportedExtensions =
+        [".txt", ".csv", ".json", ".xml", ".md", ".pdf", ".docx"];
+
     public async Task<StoredAttachment> SaveAsync(string fileName, Stream content, CancellationToken cancellationToken)
     {
         var original = Path.GetFileName(fileName);
-        var id = $"{Guid.NewGuid():N}{Path.GetExtension(original).ToLowerInvariant()}";
-        System.IO.Directory.CreateDirectory(options.Directory);
-        await using var output = File.Create(Path.Combine(options.Directory, id));
-        await content.CopyToAsync(output, cancellationToken);
+        var extension = Path.GetExtension(original).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(original) || !SupportedExtensions.Contains(extension))
+            throw new InvalidDataException("Unsupported attachment type.");
+        if (content.CanSeek && (content.Length <= 0 || content.Length > options.MaximumBytes))
+            throw new InvalidDataException($"Attachment must contain data and be no larger than {options.MaximumBytes} bytes.");
+
+        var id = $"{Guid.NewGuid():N}{extension}";
+        Directory.CreateDirectory(options.Directory);
+        var path = Path.Combine(options.Directory, id);
+        try
+        {
+            await using var output = File.Create(path);
+            var buffer = new byte[81920];
+            long total = 0;
+            int read;
+            while ((read = await content.ReadAsync(buffer, cancellationToken)) > 0)
+            {
+                total += read;
+                if (total > options.MaximumBytes)
+                    throw new InvalidDataException($"Attachment must be no larger than {options.MaximumBytes} bytes.");
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            }
+            if (total == 0) throw new InvalidDataException("Attachment must contain data.");
+        }
+        catch
+        {
+            File.Delete(path);
+            throw;
+        }
+
         return new StoredAttachment(id, original);
     }
 
