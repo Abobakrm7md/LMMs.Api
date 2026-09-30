@@ -17,14 +17,14 @@ Server=localhost,1433;Database=LMMs;User Id=sa;Password=<strong-password>;TrustS
 From the repository root:
 
 ```bash
-dotnet user-secrets set "ConnectionStrings:LMMsDatabase" "Server=localhost,1433;Database=LMMs;User Id=sa;Password=<strong-password>;TrustServerCertificate=True;Encrypt=True" --project LMMs.Api
+dotnet user-secrets set "ConnectionStrings:LMMsDatabase" "Server=localhost,1433;Database=LMMs;User Id=sa;Password=<strong-password>;TrustServerCertificate=True;Encrypt=True" --project Agent.Api
 
-dotnet user-secrets set "Authentication:Jwt:Issuer" "LMMs.Api" --project LMMs.Api
-dotnet user-secrets set "Authentication:Jwt:Audience" "LMMs.Web" --project LMMs.Api
-dotnet user-secrets set "Authentication:Jwt:SigningKey" "replace-with-a-random-secret-of-at-least-32-characters" --project LMMs.Api
+dotnet user-secrets set "Authentication:Jwt:Issuer" "LMMs.Api" --project Agent.Api
+dotnet user-secrets set "Authentication:Jwt:Audience" "LMMs.Web" --project Agent.Api
+dotnet user-secrets set "Authentication:Jwt:SigningKey" "replace-with-a-random-secret-of-at-least-32-characters" --project Agent.Api
 
 # Optional: enables the existing web-search tool
-dotnet user-secrets set "Search:SerperApiKey" "<serper-api-key>" --project LMMs.Api
+dotnet user-secrets set "Search:Serper:ApiKey" "<serper-api-key>" --project Agent.Api
 ```
 
 Use deployment secret storage/environment variables rather than user secrets outside local development.
@@ -32,7 +32,7 @@ Use deployment secret storage/environment variables rather than user secrets out
 ## 3. Apply the included migration
 
 ```bash
-dotnet ef database update --project LMMs.Api --startup-project LMMs.Api
+dotnet ef database update --project Agent.Infrastructure --startup-project Agent.Api
 ```
 
 The included initial migration creates `Users`, `Conversations`, `ChatMessages`, and `ToolExecutions`, including ownership and history indexes.
@@ -40,8 +40,8 @@ The included initial migration creates `Users`, `Conversations`, `ChatMessages`,
 ## 4. Run the API and frontend
 
 ```bash
-dotnet run --project LMMs.Api --launch-profile https
-cd LMMs.Api/ai-chat-fe
+dotnet run --project Agent.Api --launch-profile https
+cd Agent.Frontend
 npm ci
 npm start
 ```

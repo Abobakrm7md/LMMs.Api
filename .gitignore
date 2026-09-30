@@ -229,6 +229,9 @@ _pkginfo.txt
 # but keep track of directories ending in .cache
 !?*.[Cc]ache/
 
+# Runtime uploads (existing tracked samples remain preserved)
+Agent.Api/Files/*
+
 # Others
 ClientBin/
 ~$*
@@ -285,8 +288,7 @@ FakesAssemblies/
 .ntvs_analysis.dat
 node_modules/
 
-# Runtime uploads and local secrets
-LMMs.Api/Files/
+# Local secrets
 appsettings.Local.json
 
 # Visual Studio 6 build log

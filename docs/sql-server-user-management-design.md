@@ -69,34 +69,34 @@ There is no existing persisted history to migrate: the current history is a stat
 ### 3.1 Logical layers
 
 ```text
-LMMs.Api             API host: controllers, authentication middleware, DI, HTTP DTOs
+Agent.Api            API host: controllers, authentication middleware, DI, HTTP DTOs
         ↓
-LMMs.Application     use cases, repository interfaces, current-user abstraction,
+Agent.Application     use cases, repository interfaces, current-user abstraction,
                      conversation turn orchestration, agent contracts
         ↓
-LMMs.Domain          entities, enums, value-oriented rules; no EF Core or HTTP
+Agent.Domain          entities, enums, value-oriented rules; no EF Core or HTTP
         ↑
-LMMs.Infrastructure  EF Core DbContext/configurations/repositories, SQL Server,
+Agent.Infrastructure  EF Core DbContext/configurations/repositories, SQL Server,
                      JWT implementation, attachment storage implementation
 ```
 
 Recommended projects for the target state:
 
 ```text
-LMMs.Domain
-LMMs.Application
-LMMs.Infrastructure
-LMMs.Api                 (existing ASP.NET Core host, agent adapters, controllers)
-LMMs.Api.Tests
+Agent.Domain
+Agent.Application
+Agent.Infrastructure
+Agent.Api                (ASP.NET Core host and controllers)
+Agent.Tests
 ```
 
 Project references:
 
 ```text
-LMMs.Api           -> LMMs.Application, LMMs.Infrastructure
-LMMs.Infrastructure -> LMMs.Application, LMMs.Domain
-LMMs.Application   -> LMMs.Domain
-LMMs.Domain        -> no project dependency
+LMMs.Api           -> Agent.Application, Agent.Infrastructure
+Agent.Infrastructure -> Agent.Application, Agent.Domain
+Agent.Application   -> Agent.Domain
+Agent.Domain        -> no project dependency
 ```
 
 This can be introduced incrementally. Initially, the folders and namespaces may live in the existing API project to reduce churn, but **EF configurations and repository implementations must remain separated from agent logic**. Splitting into the projects above should be completed before the persistence surface grows further.
@@ -746,12 +746,12 @@ After adding the Infrastructure project and DbContext:
 
 ```bash
 dotnet ef migrations add InitialUserConversationPersistence \
-  --project LMMs.Infrastructure \
+  --project Agent.Infrastructure \
   --startup-project LMMs.Api \
   --output-dir Persistence/Migrations
 
 dotnet ef database update \
-  --project LMMs.Infrastructure \
+  --project Agent.Infrastructure \
   --startup-project LMMs.Api
 ```
 
@@ -773,7 +773,7 @@ For a temporary single-project implementation, target `LMMs.Api` for both projec
 Before introducing a database:
 
 1. Rotate the currently hard-coded web-search credential.
-2. Remove tracked production logs/uploads from `LMMs.Api/Files/`, ignore runtime upload storage, and scrub shared Git history as required.
+2. Remove tracked production logs/uploads from `Agent.Api/Files/`, ignore runtime upload storage, and scrub shared Git history as required.
 3. Move Ollama and web-search configuration into protected configuration/options.
 4. Replace the frontend hard-coded localhost endpoint with a relative API base/proxy.
 
