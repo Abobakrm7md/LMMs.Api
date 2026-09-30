@@ -52,9 +52,11 @@ public sealed class ChatModelPlanner(IChatModel chatModel) : IPlanner
         Decide whether the task can be answered directly, needs one tool, or needs sequential tools.
         Available tools:
         {{{FormatTools(tools)}}}
+        The user's task is the final objective. Tools only provide information; successful tool execution does not mean the user has been answered.
+        For file questions, preserve the specific question in the goal and make each file step retrieve evidence needed to answer it, not a generic file summary. Add multiple steps when distinct facts are required.
         Use tools only when necessary. Use exact tool and parameter names. Calculator input must be one math expression.
         Later steps may reference earlier output with {{{p1}}}. Use * for multiplication.
-        JSON: { "goal":"short goal", "kind":"direct|single_tool|multi_step", "steps":[{"id":1,"description":"task","tool":"exact_name","input":{}}] }
+        JSON: { "goal":"the user's answer objective", "kind":"direct|single_tool|multi_step", "steps":[{"id":1,"description":"specific information required to answer the user","tool":"exact_name","input":{}}] }
         For direct answers, steps must be []. Do not add unnecessary or repeated calls.
         """;
     }
@@ -71,6 +73,7 @@ public sealed class ChatModelPlanner(IChatModel chatModel) : IPlanner
         Available tools:
         {{{FormatTools(tools)}}}
         Actions are continue, execute_step, complete, abort.
+        Complete only when the original user objective is answerable from the collected evidence; a successful tool call alone is not completion. Use continue or execute_step when another fact is required.
         JSON: { "action":"continue|execute_step|complete|abort", "reason":"short status", "tool":"tool_name", "description":"step", "input":{} }
         Do not repeat successful calls. Calculator input must be one expression. A date's day may be used as a number when requested.
         """;
