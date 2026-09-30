@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Agent.Application.Persistence;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 
 namespace Agent.Infrastructure.Authentication;
 

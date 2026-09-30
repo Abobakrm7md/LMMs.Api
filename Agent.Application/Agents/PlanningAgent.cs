@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using Agent.Application.Chat;
+using Agent.Application.Conversations;
 using Agent.Application.Execution;
 using Agent.Application.Planning;
 using Agent.Application.Tools;
