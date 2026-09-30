@@ -53,7 +53,7 @@ public sealed class PlanningAgent(IChatModel chatModel, IPlanner planner, IAgent
             !string.Equals(last.Content, request.Prompt, StringComparison.Ordinal))
             conversation.Add(new Message(MessageRole.User, request.Prompt));
 
-        var command = new AgentRequest(request.Prompt, request.EnableTools, request.EnableWebSearch);
+        var command = new AgentRequest(request.Prompt);
         await foreach (var item in ExecuteTurnAsync(command, conversation, cancellationToken).WithCancellation(cancellationToken))
             yield return item;
     }
@@ -64,7 +64,9 @@ public sealed class PlanningAgent(IChatModel chatModel, IPlanner planner, IAgent
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var selectedTools = tools.Select(request.EnableTools, request.EnableWebSearch, request.AttachmentId is not null);
+        // The complete applicable tool catalog is given to the planner. The model decides
+        // whether a tool is needed; transport/UI flags do not control agent behavior.
+        var selectedTools = tools.Select(request.AttachmentId is not null);
         var plan = await planner.CreatePlanAsync(new PlanningRequest(
             request.Prompt,
             conversation.Messages.TakeLast(6).Select(m => $"{m.Role}: {Truncate(m.Content, 200)}").ToList(),

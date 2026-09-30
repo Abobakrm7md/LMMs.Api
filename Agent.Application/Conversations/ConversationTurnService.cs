@@ -126,7 +126,7 @@ public sealed class ConversationTurnService(
             MaxAgentHistoryMessages,
             MaxAgentHistoryCharacters,
             cancellationToken);
-        var turn = new AgentTurnRequest(prompt, history, command.EnableTools, command.EnableWebSearch);
+        var turn = new AgentTurnRequest(prompt, history);
         var response = new StringBuilder();
         var completed = false;
 

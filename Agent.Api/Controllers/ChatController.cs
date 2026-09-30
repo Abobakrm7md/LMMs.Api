@@ -26,7 +26,7 @@ public sealed class ChatController(IAgent agent, IAttachmentStore attachments, I
             ? Request.Headers["X-Conversation-Id"].FirstOrDefault() ?? "default"
             : request.ConversationId;
         var conversation = conversations.GetOrCreate(conversationId);
-        var command = new AgentRequest(request.Prompt, request.EnableTools, request.EnableWebSearch, attachment?.Id, attachment?.OriginalName);
+        var command = new AgentRequest(request.Prompt, attachment?.Id, attachment?.OriginalName);
 
         Response.ContentType = "text/event-stream";
         await foreach (var piece in agent.RunAsync(command, conversation, cancellationToken).WithCancellation(cancellationToken))

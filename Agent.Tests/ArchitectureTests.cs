@@ -52,11 +52,11 @@ public sealed class PlannerTests
 
 public sealed class ToolRegistryTests
 {
-    [Fact] public void Selection_RespectsWebAndAttachmentFlags()
+    [Fact] public void Selection_OffersAllApplicableToolsToPlanner()
     {
         var registry = new ToolRegistry([new StubTool("general"), new StubTool("web", ToolCategory.WebSearch), new StubTool("file", ToolCategory.File)]);
-        Assert.Equal(["general"], registry.Select(true, false, false).Select(t => t.Definition.Name));
-        Assert.Equal(["file"], registry.Select(false, false, true).Select(t => t.Definition.Name));
+        Assert.Equal(new[] { "general", "web" }, registry.Select(false).Select(t => t.Definition.Name));
+        Assert.Equal(new[] { "general", "web", "file" }, registry.Select(true).Select(t => t.Definition.Name));
     }
 }
 
@@ -103,7 +103,7 @@ public sealed class AgentOrchestrationTests
         var agent = new PlanningAgent(model, planner, new AgentExecutor(registry, planner), registry);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var _ in agent.RunAsync(new AgentRequest("hello", false, false), new Conversation(), cancellation.Token)) { }
+            await foreach (var _ in agent.RunAsync(new AgentRequest("hello"), new Conversation(), cancellation.Token)) { }
         });
     }
 
@@ -115,7 +115,7 @@ public sealed class AgentOrchestrationTests
         var planner = new ChatModelPlanner(model);
         var agent = new PlanningAgent(model, planner, new AgentExecutor(registry, planner), registry);
         var chunks = new List<string>();
-        await foreach (var chunk in agent.RunAsync(new AgentRequest("time?", true, false), new Conversation(), default)) chunks.Add(chunk);
+        await foreach (var chunk in agent.RunAsync(new AgentRequest("time?"), new Conversation(), default)) chunks.Add(chunk);
         Assert.Equal("It is noon", string.Concat(chunks));
         Assert.Contains(model.StreamMessages, m => m.Content.Contains("12:00:00"));
     }

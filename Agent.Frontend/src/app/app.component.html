@@ -69,8 +69,6 @@
       <form class="composer" (ngSubmit)="sendMessage()">
         <textarea name="prompt" [(ngModel)]="prompt" placeholder="Ask anything…" [disabled]="isStreaming" maxlength="16000" required></textarea>
         <div class="composer-options">
-          <label><input type="checkbox" name="enableTools" [(ngModel)]="enableTools" [disabled]="isStreaming" /> Use calculator, date, and time tools</label>
-          <label><input type="checkbox" name="enableWebSearch" [(ngModel)]="enableWebSearch" [disabled]="isStreaming || !enableTools" /> Include web search</label>
           <span class="spacer"></span>
           <button type="button" class="stop" *ngIf="isStreaming" (click)="stopResponse()">Stop</button>
           <button type="submit" class="primary" [disabled]="isStreaming || !prompt.trim()">Send</button>

@@ -72,8 +72,6 @@ export class AppComponent implements OnInit {
   messages: ChatMessage[] = [];
   nextBeforeSequence: number | null = null;
   prompt = '';
-  enableTools = false;
-  enableWebSearch = false;
   isLoadingConversations = false;
   isLoadingMessages = false;
   isStreaming = false;
@@ -243,8 +241,6 @@ export class AppComponent implements OnInit {
 
     const form = new FormData();
     form.append('prompt', prompt);
-    form.append('enableTools', String(this.enableTools));
-    form.append('enableWebSearch', String(this.enableTools && this.enableWebSearch));
 
     try {
       const response = await fetch(`${this.apiBase}/conversations/${conversation.id}/messages`, {
