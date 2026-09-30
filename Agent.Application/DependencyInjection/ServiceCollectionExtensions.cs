@@ -17,6 +17,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAgentExecutor, AgentExecutor>();
         services.AddScoped<IToolRegistry, ToolRegistry>();
         services.AddScoped<PlanningAgent>();
+        services.AddScoped<FileAnalysisAgent>();
+        services.AddScoped<ISpecializedAgent>(provider => provider.GetRequiredService<FileAnalysisAgent>());
         services.AddScoped<ISpecializedAgent>(provider => provider.GetRequiredService<PlanningAgent>());
         services.AddScoped<IAgentRegistry, AgentRegistry>();
         services.AddScoped<IAgentTurnRunner, SupervisorAgent>();
