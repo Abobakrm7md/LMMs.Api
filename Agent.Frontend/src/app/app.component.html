@@ -68,7 +68,16 @@
 
       <form class="composer" (ngSubmit)="sendMessage()">
         <textarea name="prompt" [(ngModel)]="prompt" placeholder="Ask anything…" [disabled]="isStreaming" maxlength="16000" required></textarea>
+        <div class="selected-file" *ngIf="selectedFile">
+          <span>📎 {{ selectedFile.name }}</span>
+          <button type="button" aria-label="Remove attachment" (click)="removeSelectedFile()" [disabled]="isStreaming">×</button>
+        </div>
         <div class="composer-options">
+          <label class="attachment-button" [class.disabled]="isStreaming">
+            <input type="file" accept=".txt,.csv,.json,.xml,.md,.pdf,.docx" (change)="onFileSelected($event)" [disabled]="isStreaming" />
+            📎 Attach file
+          </label>
+          <span class="attachment-hint">10 MB max</span>
           <span class="spacer"></span>
           <button type="button" class="stop" *ngIf="isStreaming" (click)="stopResponse()">Stop</button>
           <button type="submit" class="primary" [disabled]="isStreaming || !prompt.trim()">Send</button>
