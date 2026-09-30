@@ -31,6 +31,7 @@ public sealed class SupervisorAgent(IAgentRegistry registry) : IAgentTurnRunner
         AgentTurnRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var agent = registry.Find(request)
             ?? throw new NoSuitableAgentException($"No specialized agent can handle this request.");
 

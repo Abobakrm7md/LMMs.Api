@@ -33,6 +33,37 @@ public sealed class SupervisorTests
             await Collect(supervisor.RunTurnAsync(new AgentTurnRequest("fail", []), default)));
     }
 
+    [Fact]
+    public async Task Supervisor_returns_typed_error_when_no_agent_matches()
+    {
+        var supervisor = new SupervisorAgent(new AgentRegistry([new FakeSpecializedAgent(false)]));
+        var exception = await Assert.ThrowsAsync<NoSuitableAgentException>(async () =>
+            await Collect(supervisor.RunTurnAsync(new AgentTurnRequest("unsupported", []), default)));
+        Assert.Contains("No specialized agent", exception.Message);
+    }
+
+    [Fact]
+    public void Registry_keeps_multiple_agents_and_selects_first_matching_agent()
+    {
+        var first = new FakeSpecializedAgent(false);
+        var second = new FakeSpecializedAgent(true);
+        var registry = new AgentRegistry([first, second]);
+        Assert.Same(second, registry.Find(new AgentTurnRequest("request", [])));
+        Assert.Equal(2, registry.Agents.Count);
+    }
+
+    [Fact]
+    public async Task Supervisor_honors_cancellation_before_delegation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        var agent = new FakeSpecializedAgent(true);
+        var supervisor = new SupervisorAgent(new AgentRegistry([agent]));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await Collect(supervisor.RunTurnAsync(new AgentTurnRequest("cancelled", []), cancellation.Token)));
+        Assert.Null(agent.Received);
+    }
+
     private static async Task<List<AgentTurnEvent>> Collect(IAsyncEnumerable<AgentTurnEvent> stream)
     {
         var result = new List<AgentTurnEvent>();
