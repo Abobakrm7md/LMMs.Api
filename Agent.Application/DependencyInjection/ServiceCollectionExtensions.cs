@@ -17,8 +17,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAgentExecutor, AgentExecutor>();
         services.AddScoped<IToolRegistry, ToolRegistry>();
         services.AddScoped<PlanningAgent>();
+        services.AddScoped<ISpecializedAgent>(provider => provider.GetRequiredService<PlanningAgent>());
+        services.AddScoped<IAgentRegistry, AgentRegistry>();
+        services.AddScoped<IAgentTurnRunner, SupervisorAgent>();
         services.AddScoped<IAgent>(provider => provider.GetRequiredService<PlanningAgent>());
-        services.AddScoped<IAgentTurnRunner>(provider => provider.GetRequiredService<PlanningAgent>());
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IConversationTurnService, ConversationTurnService>();
         services.AddSingleton<IClock, SystemClock>();

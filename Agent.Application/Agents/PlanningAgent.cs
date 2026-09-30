@@ -12,8 +12,12 @@ using Agent.Domain.Tools;
 namespace Agent.Application.Agents;
 
 public sealed class PlanningAgent(IChatModel chatModel, IPlanner planner, IAgentExecutor executor, IToolRegistry tools)
-    : IAgent, IAgentTurnRunner
+    : IAgent, IAgentTurnRunner, ISpecializedAgent
 {
+    public AgentDescriptor Descriptor { get; } = new("ResearchAgent", "Answers general and research-oriented requests using the existing planner, executor, and tools.", ["research", "web-search", "file-analysis"]);
+
+    public bool CanHandle(AgentTurnRequest request) => true;
+
     public string Name => "PlanningAgent";
 
     public async IAsyncEnumerable<string> RunAsync(
