@@ -1,4 +1,5 @@
 using Agent.Application.Chat;
+using System.Text.Json;
 
 namespace Agent.Application.Agents;
 
