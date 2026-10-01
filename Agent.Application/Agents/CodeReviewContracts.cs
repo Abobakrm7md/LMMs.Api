@@ -54,7 +54,27 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
     }
     internal static IReadOnlyList<ReviewFinding> Parse(string json)
     {
-        try { return System.Text.Json.JsonSerializer.Deserialize<List<ReviewFinding>>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? []; }
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        var normalized = json.Trim();
+        if (normalized.StartsWith("```") )
+        {
+            var firstLine = normalized.IndexOf('\n');
+            var lastFence = normalized.LastIndexOf("```");
+            if (firstLine >= 0 && lastFence > firstLine)
+                normalized = normalized[(firstLine + 1)..lastFence].Trim();
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(normalized);
+            var element = document.RootElement;
+            if (element.ValueKind == System.Text.Json.JsonValueKind.Object && element.TryGetProperty("findings", out var wrapped))
+                element = wrapped;
+            if (element.ValueKind != System.Text.Json.JsonValueKind.Array) return [];
+            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+            return element.Deserialize<List<ReviewFinding>>(options) ?? [];
+        }
         catch (System.Text.Json.JsonException) { return []; }
     }
 }
