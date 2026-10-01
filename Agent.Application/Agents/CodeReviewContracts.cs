@@ -80,6 +80,9 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
                     normalized = normalized[objectStart..(objectEnd + 1)];
             }
 
+            if (normalized.Length == 0 || (normalized[0] != '[' && normalized[0] != '{'))
+                return [];
+
             using var document = System.Text.Json.JsonDocument.Parse(normalized);
             var element = document.RootElement;
             if (element.ValueKind == System.Text.Json.JsonValueKind.Object && element.TryGetProperty("findings", out var wrapped))
@@ -90,5 +93,6 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
             return element.Deserialize<List<ReviewFinding>>(options) ?? [];
         }
         catch (System.Text.Json.JsonException) { return []; }
+        catch (InvalidOperationException) { return []; }
     }
 }
