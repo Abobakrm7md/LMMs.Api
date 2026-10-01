@@ -67,6 +67,20 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
 
         try
         {
+            // Models occasionally prepend an explanation despite the JSON-only instruction.
+            // Extract a JSON object/array when one is present; otherwise return a controlled empty result.
+            var arrayStart = normalized.IndexOf('[');
+            var arrayEnd = normalized.LastIndexOf(']');
+            if (arrayStart >= 0 && arrayEnd > arrayStart)
+                normalized = normalized[arrayStart..(arrayEnd + 1)];
+            else
+            {
+                var objectStart = normalized.IndexOf('{');
+                var objectEnd = normalized.LastIndexOf('}');
+                if (objectStart >= 0 && objectEnd > objectStart)
+                    normalized = normalized[objectStart..(objectEnd + 1)];
+            }
+
             using var document = System.Text.Json.JsonDocument.Parse(normalized);
             var element = document.RootElement;
             if (element.ValueKind == System.Text.Json.JsonValueKind.Object && element.TryGetProperty("findings", out var wrapped))
