@@ -27,8 +27,8 @@ public sealed class PullRequestProviderRegistry(IEnumerable<IPullRequestProvider
 
 public enum ReviewSeverity { Critical, High, Medium, Low, Info }
 public enum ReviewCategory { Bug, Security, Performance, Architecture, Maintainability, CodeQuality, Testing }
-public sealed record ReviewFinding(ReviewSeverity Severity, ReviewCategory Category, string Title, string Description, string? File, int? Line, string WhyItMatters, string SuggestedFix);
-public sealed record CodeReviewResult(string Provider, string Repository, string PullRequest, IReadOnlyList<ReviewFinding> Findings, string? RawReview);
+public sealed record ReviewFinding(ReviewSeverity Severity, ReviewCategory Category, string? Title, string? Description, string? File, int? Line, string? WhyItMatters, string? SuggestedFix, string? Message = null);
+public sealed record CodeReviewResult(string Provider, string Repository, string PullRequest, IReadOnlyList<ReviewFinding> Findings);
 
 public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, IChatModel chatModel) : ISpecializedAgent
 {
@@ -93,11 +93,13 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
 
         try
         {
-            using var document = JsonDocument.Parse(normalized);
-            var element = document.RootElement;
-
-            if (element.ValueKind == JsonValueKind.Object &&
-                element.TryGetProperty("findings", out var findingsElement))
+            // Models may prepend an explanation, headings, or recommendations before the JSON.
+            // Extract the JSON payload before deciding that the response is unstructured.
+            var arrayStart = normalized.IndexOf('[');
+            var arrayEnd = normalized.LastIndexOf(']');
+            if (arrayStart >= 0 && arrayEnd > arrayStart)
+                normalized = normalized[arrayStart..(arrayEnd + 1)];
+            else
             {
                 element = findingsElement;
             }
