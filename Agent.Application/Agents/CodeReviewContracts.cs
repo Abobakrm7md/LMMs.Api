@@ -1,5 +1,6 @@
 using Agent.Application.Chat;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Agent.Application.Agents;
 
@@ -27,7 +28,7 @@ public sealed class PullRequestProviderRegistry(IEnumerable<IPullRequestProvider
 public enum ReviewSeverity { Critical, High, Medium, Low, Info }
 public enum ReviewCategory { Bug, Security, Performance, Architecture, Maintainability, CodeQuality, Testing }
 public sealed record ReviewFinding(ReviewSeverity Severity, ReviewCategory Category, string Title, string Description, string? File, int? Line, string WhyItMatters, string SuggestedFix);
-public sealed record CodeReviewResult(string Provider, string Repository, string PullRequest, IReadOnlyList<ReviewFinding> Findings);
+public sealed record CodeReviewResult(string Provider, string Repository, string PullRequest, IReadOnlyList<ReviewFinding> Findings, string? RawReview);
 
 public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, IChatModel chatModel) : ISpecializedAgent
 {
@@ -41,16 +42,31 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
         var pullRequest = await provider.GetAsync(url, cancellationToken);
         if (pullRequest.Files.Count == 0) { yield return new TextDeltaProduced("The pull request has no reviewable changes."); yield break; }
         var prompt = $"Review this pull request. The user's objective is: {request.Prompt}\nReturn ONLY JSON array of findings. Do not invent issues; report concrete defects, risks, and actionable improvements. Distinguish facts from style preferences. Each item must have severity (Critical, High, Medium, Low, Info), category (Bug, Security, Performance, Architecture, Maintainability, CodeQuality, Testing), title, description, file, line, whyItMatters, suggestedFix.\nChanges:\n{string.Join("\n\n", pullRequest.Files.Select(f => $"FILE: {f.Path}\n{f.Patch}"))}";
-        var response = await chatModel.CompleteAsync([new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.System, "You are a senior software engineer performing a practical code review."), new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.User, prompt)], new ChatModelOptions(0), cancellationToken);
-        var findings = Parse(response);
-        // A model may ignore the JSON instruction and return a prose review. Preserve that
-        // useful response instead of converting it into a misleading empty review.
-        var text = findings.Count > 0
-            ? string.Join("\n", findings.Select(f => $"[{f.Severity}] {f.File}:{f.Line} {f.Title} — {f.SuggestedFix}"))
-            : string.IsNullOrWhiteSpace(response)
-                ? "The model returned an empty review."
-                : response.Trim();
-        yield return new TextDeltaProduced(text);
+        var response = await chatModel.CompleteAsync([new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.System
+            , "You are a senior software engineer performing a practical code review."), 
+            new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.User, prompt)], new ChatModelOptions(0), cancellationToken);
+        var review = Parse(response);
+
+        if (review.Findings.Count > 0)
+        {
+            var formatted = string.Join(
+                "\n",
+                review.Findings.Select(f =>
+                    $"[{f.Severity}] {f.File}:{f.Line} {f.Title} — {f.SuggestedFix}"));
+
+            yield return new TextDeltaProduced(formatted);
+        }
+        else if (!string.IsNullOrWhiteSpace(review.RawReview))
+        {
+            yield return new TextDeltaProduced(review.RawReview);
+        }
+        else
+        {
+            yield return new TextDeltaProduced(
+                "The model returned an empty code review.");
+        }
+
+       // yield return new TextDeltaProduced(text);
     }
 
     private static bool TryGetUrl(string prompt, out Uri url)
@@ -59,50 +75,48 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
         var candidate = prompt.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(x => Uri.TryCreate(x.Trim(), UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttps || u.Scheme == Uri.UriSchemeHttp));
         return candidate is not null && Uri.TryCreate(candidate, UriKind.Absolute, out url);
     }
-    internal static IReadOnlyList<ReviewFinding> Parse(string json)
+    internal static CodeReviewResult Parse(string? response)
     {
-        if (string.IsNullOrWhiteSpace(json)) return [];
-        var normalized = json.Trim();
-        if (normalized.StartsWith("```") )
-        {
-            var firstLine = normalized.IndexOf('\n');
-            var lastFence = normalized.LastIndexOf("```");
-            if (firstLine >= 0 && lastFence > firstLine)
-                normalized = normalized[(firstLine + 1)..lastFence].Trim();
-        }
+        if (string.IsNullOrWhiteSpace(response))
+            return new CodeReviewResult(" ", "", " ", [], null);
 
-        if (normalized.Length == 0 || (normalized[0] != '[' && normalized[0] != '{'))
-            return [];
+        var normalized = response.Trim();
+
+        if (!normalized.StartsWith("[", StringComparison.Ordinal) &&
+            !normalized.StartsWith("{", StringComparison.Ordinal))
+        {
+            return new CodeReviewResult(" ", "", " ", [], normalized);
+        }
 
         try
         {
-            // Models occasionally prepend an explanation despite the JSON-only instruction.
-            // Extract a JSON object/array when one is present; otherwise return a controlled empty result.
-            var arrayStart = normalized.IndexOf('[');
-            var arrayEnd = normalized.LastIndexOf(']');
-            if (arrayStart >= 0 && arrayEnd > arrayStart)
-                normalized = normalized[arrayStart..(arrayEnd + 1)];
-            else
+            using var document = JsonDocument.Parse(normalized);
+            var element = document.RootElement;
+
+            if (element.ValueKind == JsonValueKind.Object &&
+                element.TryGetProperty("findings", out var findingsElement))
             {
-                var objectStart = normalized.IndexOf('{');
-                var objectEnd = normalized.LastIndexOf('}');
-                if (objectStart >= 0 && objectEnd > objectStart)
-                    normalized = normalized[objectStart..(objectEnd + 1)];
+                element = findingsElement;
             }
 
-            if (normalized.Length == 0 || (normalized[0] != '[' && normalized[0] != '{'))
-                return [];
+            if (element.ValueKind != JsonValueKind.Array)
+                return new CodeReviewResult(" ", "", " ", [], normalized);
 
-            using var document = System.Text.Json.JsonDocument.Parse(normalized);
-            var element = document.RootElement;
-            if (element.ValueKind == System.Text.Json.JsonValueKind.Object && element.TryGetProperty("findings", out var wrapped))
-                element = wrapped;
-            if (element.ValueKind != System.Text.Json.JsonValueKind.Array) return [];
-            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-            return element.Deserialize<List<ReviewFinding>>(options) ?? [];
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            options.Converters.Add(new JsonStringEnumConverter());
+
+            var findings =
+                element.Deserialize<List<ReviewFinding>>(options) ?? [];
+
+            return new CodeReviewResult(" ", "", " ", findings, null);
         }
-        catch (System.Text.Json.JsonException) { return []; }
-        catch (InvalidOperationException) { return []; }
+        catch (JsonException)
+        {
+            return new CodeReviewResult(" ", "", " ", [], normalized);
+        }
     }
 }
