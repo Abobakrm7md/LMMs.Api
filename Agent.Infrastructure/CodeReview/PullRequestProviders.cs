@@ -30,8 +30,8 @@ public sealed class GitHubPullRequestProvider(HttpClient httpClient, IConfigurat
         var token = configuration["GitHub:Token"];
         foreach (var finding in findings)
         {
-            var title = finding.Title ?? finding.Message ?? "Code review finding";
-            var details = finding.Description ?? finding.Message ?? "No additional details provided.";
+            var title = finding.Title ?? finding.Title ?? "Code review finding";
+            var details = finding.Description ?? finding.Title ?? "No additional details provided.";
             var body = $"**{finding.Severity} — {finding.Category}: {title}**\n\n{details}\n\n**Why it matters:** {finding.WhyItMatters ?? "See the changed code."}\n\n**Suggested fix:** {finding.SuggestedFix ?? "Review and address this finding."}";
             using var request = new HttpRequestMessage(HttpMethod.Post, $"https://api.github.com/repos/{repository}/issues/{number}/comments")
             { Content = new StringContent(JsonSerializer.Serialize(new { body }), System.Text.Encoding.UTF8, "application/json") };
