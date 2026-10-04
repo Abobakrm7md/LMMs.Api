@@ -42,9 +42,16 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
         var pullRequest = await provider.GetAsync(url, cancellationToken);
         if (pullRequest.Files.Count == 0) { yield return new TextDeltaProduced("The pull request has no reviewable changes."); yield break; }
         var prompt = $"Review this pull request. The user's objective is: {request.Prompt}\nReturn ONLY JSON array of findings. Do not invent issues; report concrete defects, risks, and actionable improvements. Distinguish facts from style preferences. Each item must have severity (Critical, High, Medium, Low, Info), category (Bug, Security, Performance, Architecture, Maintainability, CodeQuality, Testing), title, description, file, line, whyItMatters, suggestedFix.\nChanges:\n{string.Join("\n\n", pullRequest.Files.Select(f => $"FILE: {f.Path}\n{f.Patch}"))}";
-        var response = await chatModel.CompleteAsync([new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.System
-            , "You are a senior software engineer performing a practical code review."), 
+        string response = string.Empty;
+        try
+        {
+            response = await chatModel.CompleteAsync([new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.System
+            , "You are a senior software engineer performing a practical code review."),
             new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.User, prompt)], new ChatModelOptions(0), cancellationToken);
+        }catch(Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
         var review = Parse(response);
 
         if (review.Findings.Count > 0)
