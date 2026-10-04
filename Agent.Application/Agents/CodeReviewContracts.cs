@@ -10,6 +10,7 @@ public interface IPullRequestProvider
     string Name { get; }
     bool CanHandle(Uri pullRequestUrl);
     Task<PullRequestData> GetAsync(Uri pullRequestUrl, CancellationToken cancellationToken);
+    Task AddFindingCommentsAsync(Uri pullRequestUrl, IReadOnlyList<ReviewFinding> findings, CancellationToken cancellationToken);
 }
 
 public interface IPullRequestProviderRegistry
@@ -42,6 +43,8 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
         var prompt = $"Review this pull request. The user's objective is: {request.Prompt}\nReturn ONLY JSON array of findings. Do not invent issues; report concrete defects, risks, and actionable improvements. Distinguish facts from style preferences. Each item must have severity (Critical, High, Medium, Low, Info), category (Bug, Security, Performance, Architecture, Maintainability, CodeQuality, Testing), title, description, file, line, whyItMatters, suggestedFix.\nChanges:\n{string.Join("\n\n", pullRequest.Files.Select(f => $"FILE: {f.Path}\n{f.Patch}"))}";
         var response = await chatModel.CompleteAsync([new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.System, "You are a senior software engineer performing a practical code review."), new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.User, prompt)], new ChatModelOptions(0), cancellationToken);
         var findings = Parse(response);
+        if (findings.Count > 0)
+            await provider.AddFindingCommentsAsync(url, findings, cancellationToken);
         // A model may ignore the JSON instruction and return a prose review. Preserve that
         // useful response instead of converting it into a misleading empty review.
         var text = findings.Count > 0
