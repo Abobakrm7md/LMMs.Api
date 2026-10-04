@@ -25,7 +25,7 @@ public sealed class PullRequestProviderRegistry(IEnumerable<IPullRequestProvider
 
 public enum ReviewSeverity { Critical, High, Medium, Low, Info }
 public enum ReviewCategory { Bug, Security, Performance, Architecture, Maintainability, CodeQuality, Testing }
-public sealed record ReviewFinding(ReviewSeverity Severity, ReviewCategory Category, string Title, string Description, string? File, int? Line, string WhyItMatters, string SuggestedFix);
+public sealed record ReviewFinding(ReviewSeverity Severity, ReviewCategory Category, string? Title, string? Description, string? File, int? Line, string? WhyItMatters, string? SuggestedFix, string? Message = null);
 public sealed record CodeReviewResult(string Provider, string Repository, string PullRequest, IReadOnlyList<ReviewFinding> Findings);
 
 public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, IChatModel chatModel) : ISpecializedAgent
@@ -70,13 +70,10 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
                 normalized = normalized[(firstLine + 1)..lastFence].Trim();
         }
 
-        if (normalized.Length == 0 || (normalized[0] != '[' && normalized[0] != '{'))
-            return [];
-
         try
         {
-            // Models occasionally prepend an explanation despite the JSON-only instruction.
-            // Extract a JSON object/array when one is present; otherwise return a controlled empty result.
+            // Models may prepend an explanation, headings, or recommendations before the JSON.
+            // Extract the JSON payload before deciding that the response is unstructured.
             var arrayStart = normalized.IndexOf('[');
             var arrayEnd = normalized.LastIndexOf(']');
             if (arrayStart >= 0 && arrayEnd > arrayStart)
