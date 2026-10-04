@@ -1,20 +1,44 @@
+using System.Text.Json;
 using Agent.Api.Contracts;
-using Agent.Application.Agents;
+using Agent.Application.Common;
 using Agent.Application.Conversations;
 using Agent.Application.Files;
+using Agent.Application.Persistence;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agent.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
-public sealed class ChatController(IAgent agent, IAttachmentStore attachments, IConversationStore conversations) : ControllerBase
+[Authorize]
+[Route("api/chat")]
+public sealed class ChatController(
+    IConversationTurnService conversations,
+    IAttachmentStore attachments) : ControllerBase
 {
-    [HttpPost("/api/chat")]
+    [HttpPost]
     [Consumes("multipart/form-data")]
-    public async Task Stream([FromForm] ChatRequest request)
+    [Produces("text/event-stream")]
+    public async Task Stream([FromForm] ChatRequest request, CancellationToken cancellationToken)
     {
-        var cancellationToken = HttpContext.RequestAborted;
+        Guid conversationId;
+        if (!Guid.TryParse(request.ConversationId ?? Request.Headers["X-Conversation-Id"].FirstOrDefault(), out conversationId))
+        {
+            var created = await conversations.CreateAsync(new CreateConversationCommand(null), cancellationToken);
+            conversationId = created.Id;
+            Response.Headers["X-Conversation-Id"] = conversationId.ToString();
+        }
+
+        try
+        {
+            await conversations.EnsureOwnedAsync(conversationId, cancellationToken);
+        }
+        catch (ResourceNotFoundException)
+        {
+            Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
         StoredAttachment? attachment = null;
         if (request.File is not null)
         {
@@ -22,17 +46,26 @@ public sealed class ChatController(IAgent agent, IAttachmentStore attachments, I
             attachment = await attachments.SaveAsync(request.File.FileName, stream, cancellationToken);
         }
 
-        var conversationId = string.IsNullOrWhiteSpace(request.ConversationId)
-            ? Request.Headers["X-Conversation-Id"].FirstOrDefault() ?? "default"
-            : request.ConversationId;
-        var conversation = conversations.GetOrCreate(conversationId);
-        var command = new AgentRequest(request.Prompt, attachment?.Id, attachment?.OriginalName);
-
         Response.ContentType = "text/event-stream";
-        await foreach (var piece in agent.RunAsync(command, conversation, cancellationToken).WithCancellation(cancellationToken))
+        Response.Headers["Cache-Control"] = "no-cache";
+        try
         {
-            await Response.WriteAsync(piece, cancellationToken);
-            await Response.Body.FlushAsync(cancellationToken);
+            await foreach (var item in conversations.SendMessageAsync(
+                               conversationId,
+                               new SendMessageCommand(request.Prompt, attachment?.Id, attachment?.OriginalName),
+                               cancellationToken))
+            {
+                var json = JsonSerializer.Serialize(item);
+                await Response.WriteAsync($"event: {item.Type}\ndata: {json}\n\n", cancellationToken);
+                await Response.Body.FlushAsync(cancellationToken);
+            }
+        }
+        catch (RequestValidationException exception)
+        {
+            await Response.WriteAsync($"event: error\ndata: {JsonSerializer.Serialize(new { error = exception.Message })}\n\n", CancellationToken.None);
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
         }
     }
 }
