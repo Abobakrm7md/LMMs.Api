@@ -12,6 +12,7 @@ public interface IPullRequestProvider
     string Name { get; }
     bool CanHandle(Uri pullRequestUrl);
     Task<PullRequestData> GetAsync(Uri pullRequestUrl, CancellationToken cancellationToken);
+    Task AddFindingCommentsAsync(Uri pullRequestUrl, IReadOnlyList<ReviewFinding> findings, CancellationToken cancellationToken);
 }
 
 public interface IPullRequestProviderRegistry
