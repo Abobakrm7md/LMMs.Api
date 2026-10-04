@@ -43,7 +43,13 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
         var prompt = $"Review this pull request. The user's objective is: {request.Prompt}\nReturn ONLY JSON array of findings. Do not invent issues; report concrete defects, risks, and actionable improvements. Distinguish facts from style preferences. Each item must have severity (Critical, High, Medium, Low, Info), category (Bug, Security, Performance, Architecture, Maintainability, CodeQuality, Testing), title, description, file, line, whyItMatters, suggestedFix.\nChanges:\n{string.Join("\n\n", pullRequest.Files.Select(f => $"FILE: {f.Path}\n{f.Patch}"))}";
         var response = await chatModel.CompleteAsync([new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.System, "You are a senior software engineer performing a practical code review."), new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.User, prompt)], new ChatModelOptions(0), cancellationToken);
         var findings = Parse(response);
-        var text = findings.Count == 0 ? "No actionable findings were identified." : string.Join("\n", findings.Select(f => $"[{f.Severity}] {f.File}:{f.Line} {f.Title} — {f.SuggestedFix}"));
+        // A model may ignore the JSON instruction and return a prose review. Preserve that
+        // useful response instead of converting it into a misleading empty review.
+        var text = findings.Count > 0
+            ? string.Join("\n", findings.Select(f => $"[{f.Severity}] {f.File}:{f.Line} {f.Title} — {f.SuggestedFix}"))
+            : string.IsNullOrWhiteSpace(response)
+                ? "The model returned an empty review."
+                : response.Trim();
         yield return new TextDeltaProduced(text);
     }
 
@@ -64,6 +70,9 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
             if (firstLine >= 0 && lastFence > firstLine)
                 normalized = normalized[(firstLine + 1)..lastFence].Trim();
         }
+
+        if (normalized.Length == 0 || (normalized[0] != '[' && normalized[0] != '{'))
+            return [];
 
         try
         {
