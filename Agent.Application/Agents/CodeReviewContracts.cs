@@ -61,7 +61,7 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
     internal static IReadOnlyList<ReviewFinding> Parse(string json)
     {
         if (string.IsNullOrWhiteSpace(json)) return [];
-        var normalized = json.Trim();
+        var normalized = json.Trim('\uFEFF', '\u200B', ' ', '\r', '\n', '\t');
         if (normalized.StartsWith("```") )
         {
             var firstLine = normalized.IndexOf('\n');
