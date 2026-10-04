@@ -77,13 +77,9 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
     }
     internal static CodeReviewResult Parse(string? response)
     {
-        if (string.IsNullOrWhiteSpace(response))
-            return new CodeReviewResult(" ", "", " ", [], null);
-
-        var normalized = response.Trim();
-
-        if (!normalized.StartsWith("[", StringComparison.Ordinal) &&
-            !normalized.StartsWith("{", StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        var normalized = json.Trim('\uFEFF', '\u200B', ' ', '\r', '\n', '\t');
+        if (normalized.StartsWith("```") )
         {
             return new CodeReviewResult(" ", "", " ", [], normalized);
         }
