@@ -1,4 +1,5 @@
 using System.Text;
+using Agent.Application.Agents;
 using Agent.Application.Authentication;
 using Agent.Application.Chat;
 using Agent.Application.Conversations;
@@ -9,6 +10,7 @@ using Agent.Application.Tools;
 using Agent.Domain.Persistence;
 using Agent.Infrastructure.AI.Ollama;
 using Agent.Infrastructure.Authentication;
+using Agent.Infrastructure.CodeReview;
 using Agent.Infrastructure.Conversations;
 using Agent.Infrastructure.Files;
 using Agent.Infrastructure.Persistence;
@@ -42,6 +44,9 @@ public static class ServiceCollectionExtensions
         var ollama = new OllamaOptions();
         configuration.GetSection(OllamaOptions.SectionName).Bind(ollama);
         services.AddChatClient(new OllamaChatClient(new Uri(ollama.Endpoint), ollama.Model));
+        services.AddHttpClient<GitHubPullRequestProvider>();
+        services.AddScoped<IPullRequestProvider>(p => p.GetRequiredService<GitHubPullRequestProvider>());
+        services.AddScoped<IPullRequestProvider, AzureDevOpsPullRequestProvider>();
         services.AddScoped<IChatModel, OllamaChatModel>();
 
         var storage = new AttachmentStorageOptions();

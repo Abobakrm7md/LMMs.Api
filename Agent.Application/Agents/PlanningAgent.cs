@@ -12,8 +12,12 @@ using Agent.Domain.Tools;
 namespace Agent.Application.Agents;
 
 public sealed class PlanningAgent(IChatModel chatModel, IPlanner planner, IAgentExecutor executor, IToolRegistry tools)
-    : IAgent, IAgentTurnRunner
+    : IAgent, IAgentTurnRunner, ISpecializedAgent
 {
+    public AgentDescriptor Descriptor { get; } = new("ResearchAgent", "Answers general and research-oriented requests using the existing planner, executor, and tools.", ["research", "web-search", "file-analysis"]);
+
+    public bool CanHandle(AgentTurnRequest request) => true;
+
     public string Name => "PlanningAgent";
 
     public async IAsyncEnumerable<string> RunAsync(
@@ -118,7 +122,7 @@ public sealed class PlanningAgent(IChatModel chatModel, IPlanner planner, IAgent
     }
 
     private static string SystemPrompt(ExecutionResult? execution, bool toolsAvailable) => execution?.StepResults.Count > 0
-        ? "Answer using the request, conversation, and supplied execution results. Do not show internal JSON or plans. Do not invent missing facts; acknowledge failed tools."
+        ? "The user's original request is the final objective. Answer that request using the conversation and supplied execution evidence. Tool success is not itself an answer. For file questions, use only evidence relevant to the question, cite the file or location when available, and clearly say when the file does not contain the answer. Do not show internal JSON or plans. Do not invent missing facts; acknowledge failed tools."
         : toolsAvailable
             ? "Answer from the conversation. Tools were available but not needed. Do not invent tool results or mention an internal plan."
             : "Answer from model knowledge and the user's text. No tools are available; do not pretend to call tools or search.";
