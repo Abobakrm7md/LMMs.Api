@@ -85,6 +85,18 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
         "\n" +
         "Do NOT explain. Do NOT add headings. Output the JSON array directly.";
 
+    private const string ReformatSystemPrompt =
+        "You are a JSON formatter. The user will give you a code review in prose.\n" +
+        "Convert it into a JSON array of finding objects. Each object MUST have exactly these lowercase keys:\n" +
+        "  severity, category, title, description, file, line, whyItMatters, suggestedFix\n" +
+        "Rules:\n" +
+        "- severity is one of: Critical, High, Medium, Low, Info\n" +
+        "- category is one of: Bug, Security, Performance, Architecture, Maintainability, CodeQuality, Testing\n" +
+        "- file is the file path mentioned in the review (or null if none)\n" +
+        "- line is the line number mentioned (or null if none)\n" +
+        "- If the review mentions no actionable findings, return: []\n" +
+        "Output ONLY the JSON array. No markdown fences. No explanation.";
+
     public async IAsyncEnumerable<AgentTurnEvent> RunTurnAsync(AgentTurnRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         if (!TryGetUrl(request.Prompt, out var url)) throw new InvalidOperationException("A supported pull request URL is required for code review.");
@@ -94,6 +106,7 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
         var prompt = $"Review this pull request. The user's objective is: {request.Prompt}\n" +
             $"Changes:\n{string.Join("\n\n", pullRequest.Files.Select(f => $"FILE: {f.Path}\n{f.Patch}"))}";
 
+        // ── Call 1: Ask the LLM to review the PR ───────────────────────────
         var response = await chatModel.CompleteAsync([
             new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.System, ReviewSystemPrompt),
             new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.User, prompt)
@@ -101,18 +114,25 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
 
         var findings = Parse(response);
 
+        // ── Call 2 (if needed): Ask the LLM to reformat its own prose as JSON
+        if (findings.Count == 0 && !string.IsNullOrWhiteSpace(response))
+        {
+            var reformatted = await chatModel.CompleteAsync([
+                new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.System, ReformatSystemPrompt),
+                new Agent.Domain.Conversations.Message(Agent.Domain.Conversations.MessageRole.User, response)
+            ], new ChatModelOptions(0), cancellationToken);
+
+            findings = Parse(reformatted);
+        }
+
         // ── Post to GitHub ────────────────────────────────────────────────────
         if (findings.Count > 0)
         {
-            // Normal path: structured findings → inline PR review comments
             await provider.AddFindingCommentsAsync(url, findings, cancellationToken);
         }
         else if (!string.IsNullOrWhiteSpace(response))
         {
-            // Fallback: the LLM returned prose instead of JSON.
-            // Post the entire review as a single general PR comment so the
-            // analysis is not lost — it just appears in the conversation tab
-            // instead of as inline code comments.
+            // Last resort: post the raw prose as a single general PR comment.
             await provider.AddFindingCommentsAsync(url, [
                 new ReviewFinding(
                     Severity: ReviewSeverity.Info,
