@@ -198,7 +198,30 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
             var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 
-            var findings = element.Deserialize<List<ReviewFinding>>(options) ?? [];
+            // ── Deserialize each element individually ──────────────────────────
+            // LLMs return inconsistent enum values (e.g. "Code Quality" with a
+            // space, "code_quality" with underscores, or unknown categories like
+            // "Documentation"). Deserializing the whole array at once throws a
+            // JsonException on the FIRST bad value and kills every finding.
+            // Per-element deserialization skips the bad ones and keeps the rest.
+            var findings = new List<ReviewFinding>();
+            foreach (var item in element.EnumerateArray())
+            {
+                ReviewFinding? finding = null;
+                try
+                {
+                    finding = item.Deserialize<ReviewFinding>(options);
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // One field (usually category or severity) didn't match the enum.
+                    // Try to salvage the finding by coercing the bad fields.
+                    finding = TryCoerceFinding(item, options);
+                }
+
+                if (finding is not null)
+                    findings.Add(finding);
+            }
 
             // ── Resilient post-processing ────────────────────────────────────
             // LLMs frequently return the file path under unexpected key names
@@ -244,6 +267,56 @@ public sealed class CodeReviewAgent(IPullRequestProviderRegistry providers, ICha
     }
 
     // ── Helpers for resilient JSON key lookup ─────────────────────────────────
+
+    /// <summary>
+    /// Last-resort salvage when standard deserialization fails (usually a bad enum value).
+    /// Reads every field from the raw JSON element and maps severity/category through
+    /// a lenient fuzzy match that strips spaces, underscores, and hyphens.
+    /// </summary>
+    private static ReviewFinding? TryCoerceFinding(JsonElement item, JsonSerializerOptions options)
+    {
+        try
+        {
+            var severity = CoerceEnum<ReviewSeverity>(item, "severity") ?? ReviewSeverity.Info;
+            var category = CoerceEnum<ReviewCategory>(item, "category") ?? ReviewCategory.CodeQuality;
+            var title       = TryGetStringFromAnyKey(item, "title") ?? "";
+            var description = TryGetStringFromAnyKey(item, "description") ?? "";
+            var file        = TryGetStringFromAnyKey(item, "file", "filename", "fileName", "filePath", "path", "file_path", "source", "src");
+            var line        = TryGetIntFromAnyKey(item, "line", "lineNumber", "line_number", "lineno", "startLine", "start_line");
+            var whyItMatters = TryGetStringFromAnyKey(item, "whyItMatters", "why_it_matters", "impact");
+            var suggestedFix = TryGetStringFromAnyKey(item, "suggestedFix", "suggested_fix", "fix", "recommendation");
+            var message     = TryGetStringFromAnyKey(item, "message");
+
+            return new ReviewFinding(severity, category, title, description, file, line, whyItMatters, suggestedFix, message);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Fuzzy enum matcher: strips spaces, underscores, hyphens, and lowercases
+    /// both sides before comparing.  Handles LLM variants like
+    /// "Code Quality" → CodeQuality,  "code_quality" → CodeQuality,
+    /// "HIGH" → High,  "medium" → Medium.
+    /// </summary>
+    private static T? CoerceEnum<T>(JsonElement element, string key) where T : struct, Enum
+    {
+        var raw = TryGetStringFromAnyKey(element, key);
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        // Fast path: exact parse (case-insensitive)
+        if (Enum.TryParse<T>(raw, ignoreCase: true, out var exact))
+            return exact;
+
+        // Fuzzy path: strip all separators and try again
+        var stripped = raw.Replace(" ", "").Replace("_", "").Replace("-", "");
+        if (Enum.TryParse<T>(stripped, ignoreCase: true, out var fuzzy))
+            return fuzzy;
+
+        return null;
+    }
 
     private static string? TryGetStringFromAnyKey(JsonElement element, params string[] keys)
     {
